@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inicio</title>
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous" defer></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* Navbar */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #333;
+            color: white;
+        }
+
+        .navbar .left, .navbar .right {
+            display: flex;
+            gap: 15px;
+        }
+
+        .navbar a {
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .navbar a:hover {
+            text-decoration: underline;
+        }
+
+        .logo {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        /* Contenido principal */
+        .container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 40px;
+            gap: 40px;
+            flex: 1; /* Esto hace que el contenedor ocupe todo el espacio disponible */
+            min-height: calc(100vh - 130px); /* Altura total - (altura navbar + altura footer) */
+        }
+
+        .text-content {
+            flex: 1;
+            text-align: left;
+            max-width: 600px;
+        }
+
+        .text-content h2 {
+            color: #0039A6;
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 24px;
+        }
+
+        .text-content h1 {
+            font-size: 48px;
+            line-height: 1.2;
+            font-weight: 700;
+            color: #1A1A1A;
+            margin-bottom: 24px;
+            max-width: 500px;
+        }
+
+        .text-content p {
+            font-size: 18px;
+            line-height: 1.6;
+            color: #4A4A4A;
+            margin-bottom: 40px;
+            max-width: 600px;
+        }
+
+        .image-content {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .image-content img {
+            max-width: 100%;
+            height: auto;
+        }
+
+        /* Botones */
+        .buttons {
+            display: flex;
+            gap: 16px;
+        }
+
+        .buttons button {
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: 500;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-agenda {
+            background-color: #0D6EFD;
+            color: white;
+            border: none;
+        }
+
+        .btn-agenda:hover {
+            background-color: #0b5ed7;
+        }
+
+        .btn-firma {
+            background-color: transparent;
+            color: #0D6EFD;
+            border: 2px solid #0D6EFD;
+        }
+
+        .btn-firma:hover {
+            background-color: rgba(13, 110, 253, 0.1);
+        }
+
+
+        /* Footer */
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #333;
+            color: white;
+            margin-top: auto; /* Asegura que el footer esté al final */
+        }
+
+        .footer .socials {
+            display: flex;
+            gap: 10px;
+        }
+
+        .footer a {
+            color: white;
+            text-decoration: none;
+            font-size: 1.2em;
+        }
+
+        .footer a:hover {
+            opacity: 0.7;
+        }
+
+        /* Media queries para responsividad */
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+                padding: 20px;
+            }
+
+            .text-content {
+                text-align: center;
+                margin-bottom: 20px;
+            }
+
+            .buttons {
+                justify-content: center;
+            }
+        }
+    </style>
+
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="left">
+            <a href="{% url 'agenda_home' %}">Agenda</a>
+            <a href="{% url 'firma_home' %}">Firma Electrónica</a>
+        </div>
+        <div class="logo">Mi Empresa</div>
+        <div class="right">
+            <a href="#">Mi cuenta</a>
+            <a href="#">Cerrar sesión</a>
+        </div>
+    </nav>
+
+    <!-- Contenido principal -->
+    <div class="container">
+        <div class="text-content">
+            <h2>Cámara de Comercio de Guatemala</h2>
+            <h1>Sistema interno para firma electrónica y agenda de eventos</h1>
+            <p>Gestiona tus eventos de forma eficiente y firma documentos electrónicamente con total seguridad. Nuestro sistema te permite programar reuniones, recibir alertas de disponibilidad y firmar documentos de manera rápida y confiable.</p>
+            
+            <div class="buttons">
+                <button class="btn-agenda">Agenda</button>
+                <button class="btn-firma">Firma Electrónica</button>
+            </div>
+        </div>
+        <div class="image-content">
+            <img src="https://www.cancham.org.gt/wp-content/uploads/2017/11/logo-camara-de-comercio-de-Guatemala.png" alt="Cámara de Comercio de Guatemala">
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div>© 2024 Mi Empresa. Todos los derechos reservados.</div>
+        <div class="socials">
+            <a href="https://www.facebook.com/camaradecomerciodeguatemala/?locale=es_LA" target="_blank"><i class="fab fa-facebook-f"></i></a>
+            <a href="https://www.instagram.com/camaradecomerciodeguatemala/?hl=es" target="_blank"><i class="fab fa-instagram"></i></a>
+            <a href="https://wa.me/50224172700" target="_blank"><i class="fab fa-whatsapp"></i></a>
+        </div>
+    </footer>
+
+</body>
+</html>
