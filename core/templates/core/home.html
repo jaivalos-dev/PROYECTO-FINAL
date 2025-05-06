@@ -169,6 +169,12 @@
             opacity: 0.7;
         }
 
+        .username {
+            color: white;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
         /* Media queries para responsividad */
         @media (max-width: 768px) {
             .container {
@@ -198,8 +204,13 @@
         </div>
         <div class="logo">Mi Empresa</div>
         <div class="right">
-            <a href="#">Mi cuenta</a>
-            <a href="#">Cerrar sesión</a>
+            {% if user.is_authenticated %}
+                <span class="username">{{ user.username }}</span>
+                <a href="{% url 'logout' %}">Cerrar sesión</a>
+            {% else %}
+                <a href="{% url 'registro' %}">Registrarse</a>
+                <a href="{% url 'login' %}">Iniciar Sesión</a>
+            {% endif %}
         </div>
     </nav>
 

@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Perfil - CCG</title>
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="left">
+            <a href="{% url 'agenda_home' %}">Agenda</a>
+            <a href="{% url 'firma_home' %}">Firma Electrónica</a>
+        </div>
+        <div class="logo">Mi Empresa</div>
+        <div class="right">
+            {% if user.is_authenticated %}
+                <span class="username">{{ user.username }}</span>
+                <a href="{% url 'logout' %}">Cerrar sesión</a>
+            {% else %}
+                <a href="{% url 'registro' %}">Registrarse</a>
+                <a href="{% url 'login' %}">Iniciar Sesión</a>
+            {% endif %}
+        </div>
+    </nav>
+
+    <!-- Mensajes -->
+    {% if messages %}
+    <div class="messages">
+        {% for message in messages %}
+        <div class="alert alert-{{ message.tags }}">
+            {{ message }}
+            <button type="button" class="close-btn" onclick="this.parentElement.style.display='none';">&times;</button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Contenido -->
+    <div class="container">
+        <div class="profile-container">
+            <div class="profile-header">
+                <div class="profile-avatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div class="profile-info">
+                    <h1>{{ user.first_name }} {{ user.last_name }}</h1>
+                    <p class="username">@{{ user.username }}</p>
+                    <p class="job-title">{{ user.perfil.puesto }} - {{ user.perfil.get_departamento_display }}</p>
+                </div>
+            </div>
+            
+            <div class="profile-tabs">
+                <button class="tab active" onclick="openTab(event, 'information')">Información Personal</button>
+                <button class="tab" onclick="openTab(event, 'permissions')">Permisos</button>
+            </div>
+            
+            <div id="information" class="tab-content active">
+                <h2>Información Personal</h2>
+                
+                <form method="post">
+                    {% csrf_token %}
+                    
+                    <div class="form-row">
+                        <div class="form-group half">
+                            <label>Nombre:</label>
+                            <p class="info-value">{{ user.first_name }}</p>
+                        </div>
+                        
+                        <div class="form-group half">
+                            <label>Apellido:</label>
+                            <p class="info-value">{{ user.last_name }}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Correo Electrónico:</label>
+                        <p class="info-value">{{ user.email }}</p>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="id_telefono">Teléfono:</label>
+                        {{ form.telefono }}
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group half">
+                            <label for="id_departamento">Departamento:</label>
+                            {{ form.departamento }}
+                        </div>
+                        
+                        <div class="form-group half">
+                            <label for="id_puesto">Puesto:</label>
+                            {{ form.puesto }}
+                        </div>
+                    </div>
+                    
+                    <div class="button-group">
+                        <button type="submit" class="btn-update">Actualizar Información</button>
+                    </div>
+                </form>
+            </div>
+            
+            <div id="permissions" class="tab-content">
+                <h2>Mis Permisos</h2>
+                
+                <div class="permissions-list">
+                    <div class="permission-item {% if user.perfil.permiso_agenda %}active{% endif %}">
+                        <div class="permission-icon">
+                            <i class="far fa-calendar-alt"></i>
+                        </div>
+                        <div class="permission-details">
+                            <h3>Módulo de Agenda</h3>
+                            <p>{% if user.perfil.permiso_agenda %}Tienes acceso al módulo de calendarización de eventos.{% else %}No tienes acceso al módulo de calendarización de eventos.{% endif %}</p>
+                            {% if user.perfil.es_admin_agenda %}
+                            <span class="admin-badge">Administrador</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="permission-item {% if user.perfil.permiso_firma %}active{% endif %}">
+                        <div class="permission-icon">
+                            <i class="fas fa-file-signature"></i>
+                        </div>
+                        <div class="permission-details">
+                            <h3>Módulo de Firma Electrónica</h3>
+                            <p>{% if user.perfil.permiso_firma %}Tienes acceso al módulo de firma electrónica.{% else %}No tienes acceso al módulo de firma electrónica.{% endif %}</p>
+                            {% if user.perfil.es_admin_firma %}
+                            <span class="admin-badge">Administrador</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                
+                <p class="permission-note">Si necesitas acceso a módulos adicionales o cambiar tus permisos, contacta a un administrador del sistema.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div>© 2024 Mi Empresa. Todos los derechos reservados.</div>
+        <div class="socials">
+            <a href="https://www.facebook.com/camaradecomerciodeguatemala/?locale=es_LA" target="_blank"><i class="fab fa-facebook-f"></i></a>
+            <a href="https://www.instagram.com/camaradecomerciodeguatemala/?hl=es" target="_blank"><i class="fab fa-instagram"></i></a>
+            <a href="https://wa.me/50224172700" target="_blank"><i class="fab fa-whatsapp"></i></a>
+        </div>
+    </footer>
+
+    <script>
+        function openTab(evt, tabName) {
+            var i, tabcontent, tablinks;
+            
+            // Ocultar todos los contenidos de tabs
+            tabcontent = document.getElementsByClassName("tab-content");
+            for (i = 0; i < tabcontent.length; i++) {
+                tabcontent[i].classList.remove("active");
+            }
+            
+            // Desactivar todos los botones de tabs
+            tablinks = document.getElementsByClassName("tab");
+            for (i = 0; i < tablinks.length; i++) {
+                tablinks[i].classList.remove("active");
+            }
+            
+            // Mostrar el contenido del tab actual y activar el botón
+            document.getElementById(tabName).classList.add("active");
+            evt.currentTarget.classList.add("active");
+        }
+    </script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            background-color: #f9f9f9;
+        }
+
+        /* Navbar */
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #333;
+            color: white;
+        }
+
+        .navbar .left, .navbar .right {
+            display: flex;
+            gap: 15px;
+        }
+
+        .navbar a {
+            color: white;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .navbar a:hover {
+            text-decoration: underline;
+        }
+        
+        .username {
+            color: white;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+
+        .logo {
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        /* Mensajes */
+        .messages {
+            max-width: 800px;
+            margin: 10px auto;
+        }
+        
+        .alert {
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            position: relative;
+        }
+        
+        .alert-success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .alert-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .close-btn {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            opacity: 0.7;
+        }
+        
+        .close-btn:hover {
+            opacity: 1;
+        }
+
+        /* Contenido */
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex: 1;
+            padding: 20px;
+        }
+
+        .profile-container {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+            max-width: 800px;
+            width: 100%;
+            overflow: hidden;
+        }
+        
+        .profile-header {
+            display: flex;
+            align-items: center;
+            padding: 30px;
+            background-color: #f8f9fa;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .profile-avatar {
+            width: 80px;
+            height: 80px;
+            background-color: #0D6EFD;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-right: 20px;
+        }
+        
+        .profile-avatar i {
+            font-size: 35px;
+            color: white;
+        }
+        
+        .profile-info h1 {
+            margin: 0 0 5px;
+            font-size: 24px;
+            text-align: left;
+        }
+        
+        .profile-info .username {
+            color: #6c757d;
+            margin-bottom: 5px;
+        }
+        
+        .profile-info .job-title {
+            font-weight: 500;
+        }
+        
+        .profile-tabs {
+            display: flex;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .tab {
+            padding: 15px 20px;
+            background: none;
+            border: none;
+            border-bottom: 3px solid transparent;
+            cursor: pointer;
+            font-weight: 600;
+            color: #6c757d;
+        }
+        
+        .tab.active {
+            color: #0D6EFD;
+            border-bottom-color: #0D6EFD;
+        }
+        
+        .tab-content {
+            padding: 30px;
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .half {
+            flex: 1;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #495057;
+        }
+        
+        .info-value {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            border: 1px solid #dee2e6;
+        }
+        
+        input[type="text"],
+        input[type="tel"],
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ced4da;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        
+        h2 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+        
+        .button-group {
+            margin-top: 30px;
+        }
+        
+        .btn-update {
+            padding: 12px 20px;
+            background-color: #0D6EFD;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        
+        .btn-update:hover {
+            background-color: #0b5ed7;
+        }
+        
+        /* Permisos */
+        .permissions-list {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .permission-item {
+            display: flex;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            border-left: 4px solid #dee2e6;
+        }
+        
+        .permission-item.active {
+            border-left-color: #28a745;
+        }
+        
+        .permission-icon {
+            background-color: #dee2e6;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-right: 20px;
+        }
+        
+        .permission-item.active .permission-icon {
+            background-color: #d4edda;
+        }
+        
+        .permission-icon i {
+            font-size: 20px;
+            color: #6c757d;
+        }
+        
+        .permission-item.active .permission-icon i {
+            color: #28a745;
+        }
+        
+        .permission-details {
+            flex: 1;
+        }
+        
+        .permission-details h3 {
+            margin-bottom: 5px;
+            font-size: 18px;
+            color: #495057;
+        }
+        
+        .permission-details p {
+            color: #6c757d;
+            margin-bottom: 5px;
+        }
+        
+        .admin-badge {
+            display: inline-block;
+            background-color: #17a2b8;
+            color: white;
+            font-size: 12px;
+            padding: 3px 8px;
+            border-radius: 20px;
+        }
+        
+        .permission-note {
+            background-color: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        /* Footer */
+        .footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 20px;
+            background-color: #333;
+            color: white;
+            margin-top: auto;
+        }
+
+        .footer .socials {
+            display: flex;
+            gap: 10px;
+        }
+
+        .footer a {
+            color: white;
+            text-decoration: none;
+            font-size: 1.2em;
+        }
+
+        .footer a:hover {
+            opacity: 0.7;
+        }
+        
+        /* Responsive */
+        @media (max-width: 768px) {
+            .form-row {
+                flex-direction: column;
+                gap: 0;
+            }
+        }
+    </style>
+</body>
+</html>

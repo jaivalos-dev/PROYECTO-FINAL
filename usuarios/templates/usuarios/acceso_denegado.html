@@ -1,18 +1,14 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Firma Electrónica</title>
+    <title>Acceso Denegado - CCG</title>
     <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-
 </head>
-
 <body>
-
     <!-- Navbar -->
     <nav class="navbar">
         <div class="left">
@@ -31,34 +27,20 @@
         </div>
     </nav>
 
-
     <!-- Contenido -->
     <div class="container">
-        <h1>Firma Electrónica</h1>
-        <form method="POST" enctype="multipart/form-data">
-            {% csrf_token %}
-            <div class="form-group">
-                <label for="file_in">Seleccione el archivo PDF:</label>
-                <input type="file" name="file_in" id="file_in" accept=".pdf" required onchange="previewPDF(event)">
+        <div class="access-denied">
+            <div class="icon">
+                <i class="fas fa-lock"></i>
             </div>
-            <button type="submit">Firmar</button>
-        </form>
-
-        {% if response %}
-        <div class="alert alert-success">
-            {{ response }} - ID de firma: {{ api_id }}
+            <h1>Acceso Denegado</h1>
+            <p>Lo sentimos, no tienes permisos para acceder a esta página.</p>
+            {% if message %}
+            <div class="error-message">{{ message }}</div>
+            {% endif %}
+            <p class="contact-admin">Si necesitas acceso a esta funcionalidad, por favor contacta a un administrador del sistema.</p>
+            <a href="{% url 'home' %}" class="btn-return">Volver al Inicio</a>
         </div>
-        {% elif error %}
-        <div class="alert alert-danger">
-            {{ error }}
-        </div>
-        {% endif %}
-
-        <div id="pdfPreview" style="margin-top: 20px;">
-            <h2>Vista Previa del PDF</h2>
-            <embed id="pdfEmbed" src="" type="application/pdf" width="100%" height="500" style="display: none;"></embed>
-        </div>
-
     </div>
 
     <!-- Footer -->
@@ -71,30 +53,19 @@
         </div>
     </footer>
 
-    <script>
-        function previewPDF(event) {
-            const file = event.target.files[0]; // Obtén el archivo seleccionado
-            const reader = new FileReader();
-
-            reader.onload = function (e) {
-                const embed = document.getElementById('pdfEmbed');
-                embed.src = e.target.result; // Establece el src del embed al resultado del FileReader
-                embed.style.display = 'block'; // Muestra el embed
-            };
-
-            if (file) {
-                reader.readAsDataURL(file); // Lee el archivo como una URL de datos
-            }
-        }
-    </script>
-
-
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
             font-family: 'Inter', sans-serif;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            background-color: #f9f9f9;
         }
 
         /* Navbar */
@@ -107,8 +78,7 @@
             color: white;
         }
 
-        .navbar .left,
-        .navbar .right {
+        .navbar .left, .navbar .right {
             display: flex;
             gap: 15px;
         }
@@ -122,79 +92,91 @@
         .navbar a:hover {
             text-decoration: underline;
         }
+        
+        .username {
+            color: white;
+            font-weight: bold;
+            margin-right: 10px;
+        }
 
         .logo {
             font-size: 1.5em;
             font-weight: bold;
         }
 
-        /* Estilos básicos para el formulario */
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            /* padding: 20px; */
-            background-color: #f9f9f9;
+        /* Contenido */
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex: 1;
+            padding: 20px;
         }
 
-        .container {
-            max-width: 75%;
-            margin: 0 auto;
-            padding: 20px;
-            background: white;
+        .access-denied {
+            background-color: white;
+            padding: 40px;
             border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            flex: 1; /* Esto hace que el contenedor ocupe todo el espacio disponible */
-            min-height: calc(100vh - 109px); /* Altura total - (altura navbar + altura footer) */
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+            max-width: 600px;
+            width: 100%;
+            text-align: center;
+        }
+        
+        .icon {
+            width: 100px;
+            height: 100px;
+            background-color: #f8d7da;
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0 auto 20px;
+        }
+        
+        .icon i {
+            font-size: 50px;
+            color: #dc3545;
         }
 
         h1 {
-            text-align: center;
+            color: #dc3545;
+            margin-bottom: 20px;
         }
-
-        .form-group {
-            margin-bottom: 15px;
+        
+        p {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #555;
         }
-
-        label {
-            display: block;
-            margin-bottom: 5px;
-        }
-
-        input[type="file"] {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-
-        button {
-            width: 100%;
-            padding: 10px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        button:hover {
-            background-color: #45a049;
-        }
-
-        .alert {
-            margin-top: 20px;
-            padding: 10px;
-            border-radius: 4px;
-        }
-
-        .alert-success {
-            background-color: #d4edda;
-            color: #155724;
-        }
-
-        .alert-danger {
+        
+        .error-message {
             background-color: #f8d7da;
             color: #721c24;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        
+        .contact-admin {
+            font-size: 16px;
+            color: #6c757d;
+            margin-top: 20px;
+        }
+        
+        .btn-return {
+            display: inline-block;
+            padding: 12px 24px;
+            background-color: #0D6EFD;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: 500;
+            margin-top: 20px;
+        }
+        
+        .btn-return:hover {
+            background-color: #0b5ed7;
         }
 
         /* Footer */
@@ -206,7 +188,6 @@
             background-color: #333;
             color: white;
             margin-top: auto;
-            /* Asegura que el footer esté al final */
         }
 
         .footer .socials {
@@ -225,5 +206,4 @@
         }
     </style>
 </body>
-
 </html>

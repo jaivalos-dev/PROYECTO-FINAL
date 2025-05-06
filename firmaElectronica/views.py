@@ -4,7 +4,9 @@ from .models import FirmaElectronica
 import requests
 from requests.exceptions import Timeout
 from requests_toolbelt.multipart.encoder import MultipartEncoder
+from usuarios.decorators import permiso_firma_requerido
 
+@permiso_firma_requerido
 def firma_home(request):
     if request.method == 'POST':
         file_in = request.FILES['file_in']
@@ -33,7 +35,7 @@ def firma_home(request):
                 'npage': '0',
                 'reason': 'Pruebilla',
                 'location': 'Guatemala',
-                'file_in': (file_in.name, file_in.read(), 'application/pdf')
+                'file_in': (file_in.name, file_content, 'application/pdf')
             }
         )
 
@@ -79,7 +81,8 @@ def firma_home(request):
                     # Intentar crear y guardar el objeto
                     firma = FirmaElectronica(
                         archivo=new_file,
-                        api_id=api_id
+                        api_id=api_id,
+                        usuario=request.user  # Añadir el usuario actual
                     )
                     print("5. Objeto FirmaElectronica creado")  # Log 5
                     
