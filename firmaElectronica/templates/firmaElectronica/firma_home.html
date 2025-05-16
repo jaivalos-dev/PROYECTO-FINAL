@@ -73,17 +73,17 @@
 
     <script>
         function previewPDF(event) {
-            const file = event.target.files[0]; // Obtén el archivo seleccionado
+            const file = event.target.files[0]; 
             const reader = new FileReader();
 
             reader.onload = function (e) {
                 const embed = document.getElementById('pdfEmbed');
-                embed.src = e.target.result; // Establece el src del embed al resultado del FileReader
-                embed.style.display = 'block'; // Muestra el embed
+                embed.src = e.target.result; 
+                embed.style.display = 'block'; 
             };
 
             if (file) {
-                reader.readAsDataURL(file); // Lee el archivo como una URL de datos
+                reader.readAsDataURL(file); 
             }
         }
     </script>

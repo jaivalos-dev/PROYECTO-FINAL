@@ -22,15 +22,10 @@ class Perfil(models.Model):
     telefono = models.CharField(max_length=15, blank=True)
     departamento = models.CharField(max_length=50, choices=DEPARTAMENTO_CHOICES, default='otro')
     puesto = models.CharField(max_length=100, blank=True)
-    
-    # Permisos específicos
     permiso_agenda = models.BooleanField(default=False, verbose_name="Acceso al módulo de Agenda")
     permiso_firma = models.BooleanField(default=False, verbose_name="Acceso al módulo de Firma Electrónica")
-    
-    # Permisos administrativos
     es_admin_agenda = models.BooleanField(default=False, verbose_name="Administrador de Agenda")
     es_admin_firma = models.BooleanField(default=False, verbose_name="Administrador de Firma Electrónica")
-    
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_modificacion = models.DateTimeField(auto_now=True)
     
