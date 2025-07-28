@@ -59,6 +59,18 @@
                 </select>
             </form>
             <a href="{% url 'crear_evento' %}" class="btn-crear">Crear Evento</a>
+            <form id="export-form" method="get" action="{% url 'exportar_eventos_excel' %}">
+                <input type="hidden" name="estado" id="export-estado">
+                <input type="hidden" name="start" id="export-start">
+                <input type="hidden" name="end" id="export-end">
+                <button type="submit" class="btn-excel">Exportar Excel</button>
+            </form>
+            <form id="export-form-pdf" method="get" action="{% url 'exportar_eventos_pdf' %}">
+                <input type="hidden" name="estado" id="export-estado-pdf">
+                <input type="hidden" name="start" id="export-start-pdf">
+                <input type="hidden" name="end" id="export-end-pdf">
+                <button type="submit" class="btn-crear" style="background-color: #dc3545;">Exportar PDF</button>
+            </form>
         </div>
         <div id="calendar"></div>
     </div>
@@ -74,6 +86,7 @@
     </footer>
 
     <script>
+        let calendario = null;
         $(document).ready(function() {
             $('#calendar').fullCalendar({
                 header: {
@@ -86,10 +99,10 @@
                 navLinks: true,
                 editable: true,
                 eventLimit: true,
-                defaultView: 'month',  
+                defaultView: 'month',   
                 slotDuration: '00:30:00',  
-                minTime: "06:00:00",       
-                maxTime: "22:00:00",      
+                minTime: "00:00:00",       
+                maxTime: "24:00:00",      
                 eventSources: [{
                     url: "{% url 'eventos_json' %}",
                     type: 'GET',
@@ -109,9 +122,34 @@
                     }
                 }
             });
+            
+            calendario = $('#calendar').fullCalendar('getCalendar');
+            
             $('#filtro-estado').on('change', function() {
-            $('#calendar').fullCalendar('refetchEvents');
-        });
+                $('#calendar').fullCalendar('refetchEvents');
+            });
+
+            $('#export-form').submit(function(e) {
+                const estado = document.getElementById('filtro-estado').value;
+                const view = calendario.view;
+                const start = view.start.format();
+                const end = view.end.format();
+
+                $('#export-estado').val(estado);
+                $('#export-start').val(start);
+                $('#export-end').val(end);
+            });
+
+            $('#export-form-pdf').submit(function(e) {
+                const estado = document.getElementById('filtro-estado').value;
+                const view = calendario.view;
+                const start = view.start.format();
+                const end = view.end.format();
+
+                $('#export-estado-pdf').val(estado);
+                $('#export-start-pdf').val(start);
+                $('#export-end-pdf').val(end);
+            });
         });
     </script>
 
@@ -195,6 +233,19 @@
 
         .btn-crear:hover {
             background-color: #0b5ed7;
+        }
+
+        .btn-excel {
+            background-color: #226d2c;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 5px;
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+
+        .btn-excel:hover {
+            background-color: #0f5c3f;
         }
 
         #calendar {

@@ -5,7 +5,9 @@ from .views import (
     editar_evento, 
     eliminar_evento, 
     cancelar_evento,
-    eventos_json
+    eventos_json,
+    exportar_eventos_excel,
+    exportar_eventos_pdf
 )
 
 urlpatterns = [
@@ -15,4 +17,7 @@ urlpatterns = [
     path('evento/eliminar/<int:pk>/', eliminar_evento, name='eliminar_evento'),
     path('evento/cancelar/<int:pk>/', cancelar_evento, name='cancelar_evento'),
     path('eventos/json/', eventos_json, name='eventos_json'),
+    path('exportar_excel/', exportar_eventos_excel, name='exportar_eventos_excel'),
+    path('exportar_pdf/', exportar_eventos_pdf, name='exportar_eventos_pdf'),
+
 ]

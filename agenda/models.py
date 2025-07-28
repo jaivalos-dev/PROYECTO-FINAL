@@ -1,6 +1,7 @@
 from django.db import models
 from django.urls import reverse
 from django.contrib.auth.models import User
+from django.utils import timezone
 
 class Evento(models.Model):
     ESTADO_CHOICES = (
@@ -31,13 +32,11 @@ class Evento(models.Model):
         return reverse('evento_detalle', args=[str(self.id)])
     
     def actualizar_estado_automatico(self):
-        """Actualiza el estado del evento basado en la fecha actual"""
-        from django.utils import timezone
-        now = timezone.now()
-        
+        now = timezone.now()  # ya es naive (sin zona horaria)
+
         if self.estado == 'cancelado':
-            return  # No cambiar estado si fue cancelado manualmente
-            
+            return
+
         if now < self.fecha_inicio:
             self.estado = 'agendado'
         elif self.fecha_inicio <= now <= self.fecha_fin:
