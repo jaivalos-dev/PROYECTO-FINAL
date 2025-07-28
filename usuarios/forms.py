@@ -11,17 +11,6 @@ class UsuarioRegistroForm(UserCreationForm):
     class Meta:
         model = User
         fields = ['username', 'email', 'first_name', 'last_name', 'password1', 'password2']
-    
-    def save(self, commit=True):
-        user = super(UsuarioRegistroForm, self).save(commit=False)
-        user.email = self.cleaned_data['email']
-        user.first_name = self.cleaned_data['first_name']
-        user.last_name = self.cleaned_data['last_name']
-        
-        if commit:
-            user.save()
-        
-        return user
 
 class PerfilForm(forms.ModelForm):
     class Meta:
@@ -30,6 +19,20 @@ class PerfilForm(forms.ModelForm):
         widgets = {
             'telefono': forms.TextInput(attrs={'placeholder': 'Ej. +502 1234-5678'}),
             'puesto': forms.TextInput(attrs={'placeholder': 'Ej. Gerente de Ventas'})
+        }
+
+class PerfilPermisoForm(forms.ModelForm):
+    class Meta:
+        model = Perfil
+        fields = ['tipo_permiso']
+        widgets = {
+            'tipo_permiso': forms.RadioSelect()
+        }
+        labels = {
+            'tipo_permiso': 'Nivel de acceso'
+        }
+        help_texts = {
+            'tipo_permiso': 'Seleccione el nivel de acceso que tendrá este usuario en el sistema.'
         }
 
 class LoginForm(AuthenticationForm):

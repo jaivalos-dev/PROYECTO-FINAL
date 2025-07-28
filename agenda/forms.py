@@ -1,30 +1,154 @@
 from django import forms
 from .models import Evento
-from django.utils import timezone
+from django.core.exceptions import ValidationError
+from datetime import datetime, timedelta
+import datetime as dt
 
 class EventoForm(forms.ModelForm):
+    # Campos personalizados para fecha y hora
+    fecha_inicio_fecha = forms.DateField(
+        widget=forms.DateInput(attrs={'type': 'date'}),
+        label="Fecha de inicio"
+    )
+    fecha_inicio_hora = forms.ChoiceField(
+        choices=[(f'{h:02d}:00', f'{h:02d}:00') for h in range(24)] +
+                [(f'{h:02d}:30', f'{h:02d}:30') for h in range(24)],
+        label="Hora de inicio"
+    )
+    
+    fecha_fin_fecha = forms.DateField(
+        widget=forms.DateInput(attrs={'type': 'date'}),
+        label="Fecha de fin"
+    )
+    fecha_fin_hora = forms.ChoiceField(
+        choices=[(f'{h:02d}:00', f'{h:02d}:00') for h in range(24)] +
+                [(f'{h:02d}:30', f'{h:02d}:30') for h in range(24)],
+        label="Hora de fin"
+    )
+    
     class Meta:
         model = Evento
-        fields = ['titulo', 'descripcion', 'fecha_inicio', 'fecha_fin', 'ubicacion', 'organizador', 'color', 'estado']
+        fields = ['titulo', 'descripcion', 'ubicacion', 'organizador', 'color']
+        exclude = ['fecha_inicio', 'fecha_fin']  # Excluimos estos campos ya que los manejaremos con campos personalizados
         widgets = {
-            'fecha_inicio': forms.DateTimeInput(attrs={
-                'type': 'datetime-local',
-                'min': timezone.now().strftime('%Y-%m-%dT%H:%M'),
-            }),
-            'fecha_fin': forms.DateTimeInput(attrs={
-                'type': 'datetime-local',
-                'min': timezone.now().strftime('%Y-%m-%dT%H:%M'),
-            }),
-            'color': forms.TextInput(attrs={'type': 'color'}),
+            'color': forms.TextInput(attrs={'type': 'color'}),  # Mantener el widget de color
         }
+    
+    def __init__(self, *args, **kwargs):
+        instance = kwargs.get('instance', None)
+        super(EventoForm, self).__init__(*args, **kwargs)
+        
+        # Ordenar correctamente las opciones de hora
+        hora_choices = []
+        for h in range(24):
+            hora_choices.append((f'{h:02d}:00', f'{h:02d}:00'))
+            hora_choices.append((f'{h:02d}:30', f'{h:02d}:30'))
+        
+        self.fields['fecha_inicio_hora'].choices = hora_choices
+        self.fields['fecha_fin_hora'].choices = hora_choices
+        
+        # Si estamos editando un evento existente, inicializar los campos personalizados
+        if instance:
+            self.initial['fecha_inicio_fecha'] = instance.fecha_inicio.date()
+            # Redondear a la media hora más cercana
+            hora = instance.fecha_inicio.hour
+            minutos = instance.fecha_inicio.minute
+            if minutos < 15:
+                minutos = 0
+            elif minutos < 45:
+                minutos = 30
+            else:
+                minutos = 0
+                hora = (hora + 1) % 24
+            self.initial['fecha_inicio_hora'] = f'{hora:02d}:{minutos:02d}'
+            
+            self.initial['fecha_fin_fecha'] = instance.fecha_fin.date()
+            # Redondear a la media hora más cercana
+            hora = instance.fecha_fin.hour
+            minutos = instance.fecha_fin.minute
+            if minutos < 15:
+                minutos = 0
+            elif minutos < 45:
+                minutos = 30
+            else:
+                minutos = 0
+                hora = (hora + 1) % 24
+            self.initial['fecha_fin_hora'] = f'{hora:02d}:{minutos:02d}'
+        else:
+            # Si es un nuevo evento, inicializar con valores por defecto (ahora redondeado a la media hora)
+            now = dt.datetime.now()
+            hora = now.hour
+            minutos = now.minute
+            if minutos < 15:
+                minutos = 0
+            elif minutos < 45:
+                minutos = 30
+            else:
+                minutos = 0
+                hora = (hora + 1) % 24
+                
+            self.initial['fecha_inicio_fecha'] = now.date()
+            self.initial['fecha_inicio_hora'] = f'{hora:02d}:{minutos:02d}'
+            
+            # La fecha de fin es 30 minutos después por defecto
+            end_time = now + dt.timedelta(minutes=30)
+            self.initial['fecha_fin_fecha'] = end_time.date()
+            hora = end_time.hour
+            minutos = end_time.minute
+            if minutos < 15:
+                minutos = 0
+            elif minutos < 45:
+                minutos = 30
+            else:
+                minutos = 0
+                hora = (hora + 1) % 24
+            self.initial['fecha_fin_hora'] = f'{hora:02d}:{minutos:02d}'
     
     def clean(self):
         cleaned_data = super().clean()
-        fecha_inicio = cleaned_data.get('fecha_inicio')
-        fecha_fin = cleaned_data.get('fecha_fin')
         
-        if fecha_inicio and fecha_fin:
-            if fecha_fin <= fecha_inicio:
-                raise forms.ValidationError('La fecha de finalización debe ser posterior a la fecha de inicio.')
+        # Obtener los valores de los campos personalizados
+        fecha_inicio_fecha = cleaned_data.get('fecha_inicio_fecha')
+        fecha_inicio_hora = cleaned_data.get('fecha_inicio_hora')
+        fecha_fin_fecha = cleaned_data.get('fecha_fin_fecha')
+        fecha_fin_hora = cleaned_data.get('fecha_fin_hora')
+        
+        # Validar que todos los campos de fecha y hora están presentes
+        if not (fecha_inicio_fecha and fecha_inicio_hora and fecha_fin_fecha and fecha_fin_hora):
+            raise ValidationError('Todos los campos de fecha y hora son obligatorios.')
+        
+        # Convertir a objetos datetime
+        hora_inicio, minuto_inicio = map(int, fecha_inicio_hora.split(':'))
+        hora_fin, minuto_fin = map(int, fecha_fin_hora.split(':'))
+        
+        fecha_inicio = dt.datetime.combine(
+            fecha_inicio_fecha,
+            dt.time(hora_inicio, minuto_inicio)
+        )
+        
+        fecha_fin = dt.datetime.combine(
+            fecha_fin_fecha,
+            dt.time(hora_fin, minuto_fin)
+        )
+        
+        # Validar que la fecha de fin sea posterior a la de inicio
+        if fecha_fin <= fecha_inicio:
+            raise ValidationError('La fecha y hora de finalización debe ser posterior a la fecha y hora de inicio.')
+        
+        # Guardar los valores procesados para ser usados en save()
+        cleaned_data['fecha_inicio'] = fecha_inicio
+        cleaned_data['fecha_fin'] = fecha_fin
         
         return cleaned_data
+    
+    def save(self, commit=True):
+        instance = super(EventoForm, self).save(commit=False)
+        
+        # Asignar los valores de fecha y hora procesados
+        instance.fecha_inicio = self.cleaned_data['fecha_inicio']
+        instance.fecha_fin = self.cleaned_data['fecha_fin']
+        
+        if commit:
+            instance.save()
+        
+        return instance

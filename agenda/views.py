@@ -10,12 +10,15 @@ from usuarios.decorators import permiso_agenda_requerido, admin_agenda_requerido
 
 @permiso_agenda_requerido
 def agenda_home(request):
-    # Actualizar estados de eventos automáticamente
+    now = timezone.now()
     eventos = Evento.objects.all()
+
     for evento in eventos:
+        estado_anterior = evento.estado
         evento.actualizar_estado_automatico()
-        evento.save()
-    
+        if evento.estado != estado_anterior:
+            evento.save()
+
     return render(request, 'agenda/agenda_home.html', {'eventos': eventos})
 
 @permiso_agenda_requerido
@@ -24,27 +27,35 @@ def crear_evento(request):
         form = EventoForm(request.POST)
         if form.is_valid():
             evento = form.save(commit=False)
-            
-            # Validar que la fecha de fin sea posterior a la fecha de inicio
-            if evento.fecha_fin <= evento.fecha_inicio:
-                messages.error(request, 'La fecha de finalización debe ser posterior a la fecha de inicio.')
-                return render(request, 'agenda/evento_form.html', {'form': form})
+            evento.creador = request.user
             
             # Verificar si hay eventos traslapados
             eventos_traslapados = Evento.objects.filter(
-                Q(fecha_inicio__lt=evento.fecha_fin) & Q(fecha_fin__gt=evento.fecha_inicio)
-            ).exclude(estado='cancelado')
+                Q(fecha_inicio__lt=evento.fecha_fin) & 
+                Q(fecha_fin__gt=evento.fecha_inicio) & 
+                Q(ubicacion=evento.ubicacion)
+            ).exclude(id=evento.id if 'evento' in locals() else None).exclude(estado='cancelado')
             
             if eventos_traslapados.exists():
-                messages.error(request, 'Ya existe un evento agendado en ese horario.')
+                eventos_conflicto = [f"{e.titulo} ({e.fecha_inicio.strftime('%d/%m/%Y %H:%M')} - {e.fecha_fin.strftime('%d/%m/%Y %H:%M')})" for e in eventos_traslapados]
+                print(f"¡CONFLICTO DETECTADO! Eventos traslapados: {', '.join(eventos_conflicto)}")
+                messages.error(request, f'Ya existe un evento agendado en ese horario: "{eventos_traslapados.first().titulo}"')
                 return render(request, 'agenda/evento_form.html', {'form': form})
             
-            evento.creador = request.user
             evento.save()
             messages.success(request, 'Evento creado exitosamente.')
             return redirect('agenda_home')
+        else:
+            # Si el formulario no es válido, asegurarnos de que los errores se muestren
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"Error en {field}: {error}")
+            
+            # Si hay errores no relacionados con campos específicos
+            for error in form.non_field_errors():
+                messages.error(request, error)
     else:
-        form = EventoForm(initial={'fecha_inicio': timezone.now()})
+        form = EventoForm()
     
     return render(request, 'agenda/evento_form.html', {'form': form})
 
@@ -53,7 +64,7 @@ def editar_evento(request, pk):
     evento = get_object_or_404(Evento, pk=pk)
     
     # Verificar que el usuario sea el creador del evento o un administrador
-    if not (request.user == evento.creador or request.user.perfil.es_admin_agenda or request.user.is_superuser):
+    if not evento.usuario_puede_modificar(request.user):
         messages.error(request, 'No tienes permiso para editar este evento.')
         return HttpResponseForbidden("No tienes permiso para editar este evento.")
     
@@ -62,24 +73,29 @@ def editar_evento(request, pk):
         if form.is_valid():
             evento_actualizado = form.save(commit=False)
             
-            # Validar que la fecha de fin sea posterior a la fecha de inicio
-            if evento_actualizado.fecha_fin <= evento_actualizado.fecha_inicio:
-                messages.error(request, 'La fecha de finalización debe ser posterior a la fecha de inicio.')
-                return render(request, 'agenda/evento_form.html', {'form': form, 'evento': evento})
-            
             # Verificar si hay eventos traslapados, excluyendo el evento actual
             eventos_traslapados = Evento.objects.filter(
-                Q(fecha_inicio__lt=evento_actualizado.fecha_fin) & 
-                Q(fecha_fin__gt=evento_actualizado.fecha_inicio)
-            ).exclude(id=evento.id).exclude(estado='cancelado')
+                Q(fecha_inicio__lt=evento.fecha_fin) & 
+                Q(fecha_fin__gt=evento.fecha_inicio) & 
+                Q(ubicacion=evento.ubicacion)
+            ).exclude(id=evento.id if 'evento' in locals() else None).exclude(estado='cancelado')
             
             if eventos_traslapados.exists():
-                messages.error(request, 'Ya existe un evento agendado en ese horario.')
+                messages.error(request, f'Ya existe un evento agendado en ese horario: "{eventos_traslapados.first().titulo}"')
                 return render(request, 'agenda/evento_form.html', {'form': form, 'evento': evento})
             
             evento_actualizado.save()
             messages.success(request, 'Evento actualizado exitosamente.')
             return redirect('agenda_home')
+        else:
+            # Si el formulario no es válido, asegurarnos de que los errores se muestren
+            for field, errors in form.errors.items():
+                for error in errors:
+                    messages.error(request, f"Error en {field}: {error}")
+            
+            # Si hay errores no relacionados con campos específicos
+            for error in form.non_field_errors():
+                messages.error(request, error)
     else:
         form = EventoForm(instance=evento)
     
@@ -90,7 +106,7 @@ def eliminar_evento(request, pk):
     evento = get_object_or_404(Evento, pk=pk)
     
     # Verificar que el usuario sea el creador del evento o un administrador
-    if not (request.user == evento.creador or request.user.perfil.es_admin_agenda or request.user.is_superuser):
+    if not evento.usuario_puede_modificar(request.user):
         messages.error(request, 'No tienes permiso para eliminar este evento.')
         return HttpResponseForbidden("No tienes permiso para eliminar este evento.")
     
@@ -106,7 +122,7 @@ def cancelar_evento(request, pk):
     evento = get_object_or_404(Evento, pk=pk)
     
     # Verificar que el usuario sea el creador del evento o un administrador
-    if not (request.user == evento.creador or request.user.perfil.es_admin_agenda or request.user.is_superuser):
+    if not evento.usuario_puede_modificar(request.user):
         messages.error(request, 'No tienes permiso para cancelar este evento.')
         return HttpResponseForbidden("No tienes permiso para cancelar este evento.")
     
@@ -120,8 +136,21 @@ def cancelar_evento(request, pk):
 
 @permiso_agenda_requerido
 def eventos_json(request):
-    eventos = Evento.objects.all()
     
+    estado = request.GET.get('estado')
+    fecha_inicio = request.GET.get('fecha_inicio')
+    fecha_fin = request.GET.get('fecha_fin')
+    
+    eventos = Evento.objects.all()
+
+    if estado:
+        eventos = eventos.filter(estado=estado)
+
+    if fecha_inicio and fecha_fin:
+        eventos = eventos.filter(
+            fecha_inicio__gte=fecha_inicio,
+            fecha_fin__lte=fecha_fin
+        )
     # Actualizar estados automáticamente
     for evento in eventos:
         evento.actualizar_estado_automatico()
@@ -129,14 +158,8 @@ def eventos_json(request):
     
     evento_list = []
     for evento in eventos:
-        # Definir colores según el estado
-        color = evento.color
-        if evento.estado == 'en_curso':
-            color = '#FFC107'  # Amarillo para eventos en curso
-        elif evento.estado == 'finalizado':
-            color = '#6C757D'  # Gris para eventos finalizados
-        elif evento.estado == 'cancelado':
-            color = '#DC3545'  # Rojo para eventos cancelados
+        
+        color = evento.get_color_estado()
         
         # Solo incluir eventos no cancelados o si el usuario es el creador/admin
         if evento.estado != 'cancelado' or request.user == evento.creador or request.user.perfil.es_admin_agenda or request.user.is_superuser:

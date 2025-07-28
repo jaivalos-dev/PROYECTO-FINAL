@@ -48,6 +48,16 @@
     <div class="container">
         <div class="header-container">
             <h1>Calendario de Eventos</h1>
+            <form id="filtro-form">
+                <label for="filtro-estado">Filtrar por estado:</label>
+                <select id="filtro-estado" name="estado">
+                    <option value="">Todos</option>
+                    <option value="agendado">Agendado</option>
+                    <option value="en_curso">En curso</option>
+                    <option value="finalizado">Finalizado</option>
+                    <option value="cancelado">Cancelado</option>
+                </select>
+            </form>
             <a href="{% url 'crear_evento' %}" class="btn-crear">Crear Evento</a>
         </div>
         <div id="calendar"></div>
@@ -69,15 +79,27 @@
                 header: {
                     left: 'prev,next today',
                     center: 'title',
-                    right: 'month,agendaWeek,agendaDay'
+                    right: 'month,agendaWeek,agendaDay',
+                    height: 650 
                 },
                 locale: 'es',
                 navLinks: true,
                 editable: true,
                 eventLimit: true,
-                events: "{% url 'eventos_json' %}",
+                defaultView: 'month',  
+                slotDuration: '00:30:00',  
+                minTime: "06:00:00",       
+                maxTime: "22:00:00",      
+                eventSources: [{
+                    url: "{% url 'eventos_json' %}",
+                    type: 'GET',
+                    data: function() {
+                        return {
+                            estado: document.getElementById('filtro-estado').value
+                        };
+                    }
+                }],
                 eventRender: function(event, element) {
-                    // Añadir tooltip con información adicional
                     element.attr('title', 'Estado: ' + event.status + '\nCreador: ' + event.creator);
                 },
                 eventClick: function(event) {
@@ -87,6 +109,9 @@
                     }
                 }
             });
+            $('#filtro-estado').on('change', function() {
+            $('#calendar').fullCalendar('refetchEvents');
+        });
         });
     </script>
 
@@ -251,7 +276,32 @@
         .close-btn:hover {
             opacity: 1;
         }
+        
+        #filtro-form {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
 
+        #filtro-estado {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 14px;
+            background-color: #f9f9f9;
+            color: #333;
+            transition: border-color 0.3s;
+        }
+
+        #filtro-estado:hover {
+            border-color: #0D6EFD;
+        }
+
+        #filtro-estado:focus {
+            border-color: #0D6EFD;
+            outline: none;
+            background-color: #fff;
+        }
     </style>
 </body>
 </html>

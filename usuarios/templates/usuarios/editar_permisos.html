@@ -52,36 +52,38 @@
                 <p><strong>Puesto:</strong> {{ perfil.puesto }}</p>
             </div>
             
+            <!-- Reemplazar la sección de permisos con esto -->
             <form method="post">
                 {% csrf_token %}
                 
-                <h2>Permisos de Acceso</h2>
-                <div class="permissions-grid">
-                    <div class="permission-item">
-                        <input type="checkbox" id="permiso_agenda" name="permiso_agenda" {% if perfil.permiso_agenda %}checked{% endif %}>
-                        <label for="permiso_agenda">Acceso al módulo de Agenda</label>
-                        <p class="permission-desc">Permite ver y usar el calendario de eventos</p>
-                    </div>
-                    
-                    <div class="permission-item">
-                        <input type="checkbox" id="permiso_firma" name="permiso_firma" {% if perfil.permiso_firma %}checked{% endif %}>
-                        <label for="permiso_firma">Acceso al módulo de Firma Electrónica</label>
-                        <p class="permission-desc">Permite firmar documentos electrónicamente</p>
-                    </div>
+                <h2>Nivel de Acceso</h2>
+                <div class="permission-options">
+                    {{ form.tipo_permiso }}
+                    {% if form.tipo_permiso.errors %}
+                    <div class="error">{{ form.tipo_permiso.errors }}</div>
+                    {% endif %}
+                    <p class="permission-help">{{ form.tipo_permiso.help_text }}</p>
                 </div>
                 
-                <h2>Permisos Administrativos</h2>
-                <div class="permissions-grid">
-                    <div class="permission-item">
-                        <input type="checkbox" id="es_admin_agenda" name="es_admin_agenda" {% if perfil.es_admin_agenda %}checked{% endif %}>
-                        <label for="es_admin_agenda">Administrador de Agenda</label>
-                        <p class="permission-desc">Permite gestionar eventos de otros usuarios y editar configuraciones de agenda</p>
+                <div class="permission-details">
+                    <div class="permission-detail">
+                        <h3>Acceso Completo</h3>
+                        <p>Permite al usuario acceder a todos los módulos (Agenda y Firma Electrónica) con capacidades completas de administración.</p>
                     </div>
                     
-                    <div class="permission-item">
-                        <input type="checkbox" id="es_admin_firma" name="es_admin_firma" {% if perfil.es_admin_firma %}checked{% endif %}>
-                        <label for="es_admin_firma">Administrador de Firma Electrónica</label>
-                        <p class="permission-desc">Permite gestionar firmas de otros usuarios y editar configuraciones de firma</p>
+                    <div class="permission-detail">
+                        <h3>Solo Agenda</h3>
+                        <p>Permite al usuario acceder únicamente al módulo de Agenda y realizar todas las operaciones relacionadas con eventos.</p>
+                    </div>
+                    
+                    <div class="permission-detail">
+                        <h3>Solo Firma Electrónica</h3>
+                        <p>Permite al usuario acceder únicamente al módulo de Firma Electrónica para firmar documentos.</p>
+                    </div>
+                    
+                    <div class="permission-detail">
+                        <h3>Sin Acceso</h3>
+                        <p>El usuario no tendrá acceso a ningún módulo hasta que se le asigne un nivel de permiso.</p>
                     </div>
                 </div>
                 
@@ -306,6 +308,48 @@
         
         .btn-cancel:hover {
             background-color: #5a6268;
+        }
+
+        .permission-options {
+            margin-bottom: 20px;
+        }
+
+        .permission-options ul {
+            list-style: none;
+            padding: 0;
+        }
+
+        .permission-options li {
+            margin-bottom: 10px;
+        }
+
+        .permission-options input[type="radio"] {
+            margin-right: 10px;
+        }
+
+        .permission-help {
+            font-style: italic;
+            color: #6c757d;
+            margin-top: 10px;
+        }
+
+        .permission-details {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .permission-detail {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 3px solid #0D6EFD;
+        }
+
+        .permission-detail h3 {
+            margin-bottom: 10px;
+            font-size: 16px;
         }
 
         /* Responsive */

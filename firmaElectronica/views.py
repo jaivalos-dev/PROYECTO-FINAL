@@ -46,7 +46,7 @@ def firma_home(request):
         try:
             # Usar requests.request() como en Postman
             response = requests.post(
-                "http://192.168.0.23/api/sign",
+                "http://192.168.0.27/api/sign",
                 headers=headers,
                 data=multipart_data,
                 timeout=10

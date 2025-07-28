@@ -44,3 +44,19 @@ class Evento(models.Model):
             self.estado = 'en_curso'
         elif now > self.fecha_fin:
             self.estado = 'finalizado'
+
+    def usuario_puede_modificar(self, user):
+        return (
+            user == self.creador or
+            getattr(user.perfil, 'es_admin_agenda', False) or
+            user.is_superuser
+        )
+    
+    def get_color_estado(self):
+        if self.estado == 'en_curso':
+            return '#FFC107'  # Amarillo
+        elif self.estado == 'finalizado':
+            return '#6C757D'  # Gris
+        elif self.estado == 'cancelado':
+            return '#DC3545'  # Rojo
+        return self.color  # color original definido por el usuario

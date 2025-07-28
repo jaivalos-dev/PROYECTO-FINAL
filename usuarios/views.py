@@ -3,7 +3,7 @@ from django.contrib.auth import login, authenticate
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.models import User
-from .forms import UsuarioRegistroForm, PerfilForm, LoginForm
+from .forms import UsuarioRegistroForm, PerfilForm, LoginForm, PerfilPermisoForm
 
 def registro_usuario(request):
     if request.method == 'POST':
@@ -98,23 +98,20 @@ def editar_permisos(request, user_id):
         messages.error(request, "No tienes permisos para acceder a esta página.")
         return redirect('home')
     
-    usuario = User.objects.get(id=user_id)
-    perfil = usuario.perfil
+    usuario = get_object_or_404(User, id=user_id)
     
     if request.method == 'POST':
-        # Actualizar permisos
-        perfil.permiso_agenda = 'permiso_agenda' in request.POST
-        perfil.permiso_firma = 'permiso_firma' in request.POST
-        perfil.es_admin_agenda = 'es_admin_agenda' in request.POST
-        perfil.es_admin_firma = 'es_admin_firma' in request.POST
-        perfil.save()
-        
-        messages.success(request, f"Permisos actualizados para {usuario.username}")
-        return redirect('administrar_usuarios')
+        form = PerfilPermisoForm(request.POST, instance=usuario.perfil)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f"Permisos actualizados para {usuario.username}")
+            return redirect('administrar_usuarios')
+    else:
+        form = PerfilPermisoForm(instance=usuario.perfil)
     
     return render(request, 'usuarios/editar_permisos.html', {
         'usuario': usuario,
-        'perfil': perfil
+        'form': form
     })
 
 def acceso_denegado(request, message=None):

@@ -17,17 +17,41 @@ class Perfil(models.Model):
         ('otro', 'Otro'),
     )
     
+    TIPO_PERMISO_CHOICES = (
+        ('full', 'Acceso Completo'),
+        ('agenda', 'Solo Agenda'),
+        ('firma', 'Solo Firma Electrónica'),
+        ('ninguno', 'Sin Acceso'),
+    )
+    
     usuario = models.OneToOneField(User, on_delete=models.CASCADE)
     nombre_completo = models.CharField(max_length=200, blank=True)
     telefono = models.CharField(max_length=15, blank=True)
     departamento = models.CharField(max_length=50, choices=DEPARTAMENTO_CHOICES, default='otro')
     puesto = models.CharField(max_length=100, blank=True)
-    permiso_agenda = models.BooleanField(default=False, verbose_name="Acceso al módulo de Agenda")
-    permiso_firma = models.BooleanField(default=False, verbose_name="Acceso al módulo de Firma Electrónica")
-    es_admin_agenda = models.BooleanField(default=False, verbose_name="Administrador de Agenda")
-    es_admin_firma = models.BooleanField(default=False, verbose_name="Administrador de Firma Electrónica")
+    
+    # Simplificación del sistema de permisos
+    tipo_permiso = models.CharField(max_length=10, choices=TIPO_PERMISO_CHOICES, default='ninguno')
+    
     fecha_creacion = models.DateTimeField(auto_now_add=True)
     fecha_modificacion = models.DateTimeField(auto_now=True)
+    
+    # Propiedades para mantener compatibilidad con código existente
+    @property
+    def permiso_agenda(self):
+        return self.tipo_permiso in ['full', 'agenda']
+    
+    @property
+    def permiso_firma(self):
+        return self.tipo_permiso in ['full', 'firma']
+    
+    @property
+    def es_admin_agenda(self):
+        return self.tipo_permiso == 'full'
+    
+    @property
+    def es_admin_firma(self):
+        return self.tipo_permiso == 'full'
     
     class Meta:
         verbose_name = "Perfil"
