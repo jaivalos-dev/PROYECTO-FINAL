@@ -142,7 +142,50 @@
                 {% endif %}
             </div>
         </form>
+        {% if evento %}
+            <div class="historial-wrapper">
+                <button id="abrir-modal-historial" class="btn-historial">
+                    Ver historial del evento
+                </button>
+            </div>
+        {% endif %}
+    </div>
 
+    <div id="modal-historial" class="modal">
+        <div class="modal-contenido">
+            <span class="cerrar" id="cerrar-modal">&times;</span>
+            <h2>Historial del Evento</h2>
+            {% if evento.historial.all %}
+            <table class="tabla-historial">
+                <thead>
+                    <tr>
+                    <th>Fecha</th>
+                    <th>Acción</th>
+                    <th>Usuario</th>
+                    <th>Descripción</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for registro in evento.historial.all %}
+                    <tr>
+                    <td>{{ registro.fecha|date:"d/m/Y H:i" }}</td>
+                    <td>{{ registro.accion|capfirst }}</td>
+                    <td>
+                    {% if registro.usuario %}
+                        {{ registro.usuario.username }}
+                    {% else %}
+                        SISTEMA
+                    {% endif %}
+                    </td>
+                    <td>{{ registro.descripcion }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+                <p>No hay historial disponible.</p>
+            {% endif %}
+        </div>
     </div>
 
     <!-- Footer -->
@@ -422,46 +465,134 @@
         .close-btn:hover {
             opacity: 1;
         }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            padding-top: 80px;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            overflow: auto;
+            background-color: rgba(0,0,0,0.5);
+        }
+
+        .modal-contenido {
+            background-color: #fff;
+            margin: auto;
+            padding: 20px;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 800px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.3);
+            position: relative;
+        }
+
+        .cerrar {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .cerrar:hover {
+            color: #333;
+        }
+
+        .btn-historial {
+            background-color: #17A2B8; /* azul info */
+            color: white;
+            padding: 10px 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 20px;
+            font-weight: 500;
+        }
+        
+        .btn-historial:hover {
+            background-color: #138496; /* azul info oscuro */
+        }
+
+        .tabla-historial {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+        .tabla-historial th, .tabla-historial td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+
+        .tabla-historial th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+
+        .historial-wrapper {
+            text-align: center;
+            margin-top: 30px;
+        }
     </style>
 
-<script>
-    document.addEventListener('DOMContentLoaded', function() {
-        // Configurar inputs de fecha/hora para permitir solo intervalos de media hora
-        const mediaHoraInputs = document.querySelectorAll('.media-hora-input');
-        
-        mediaHoraInputs.forEach(function(input) {
-            // Al enfocar el campo, añadir un manejador para cuando pierda el foco
-            input.addEventListener('blur', function() {
-                if (!this.value) return;
-                
-                // Parsear el valor del datetime-local
-                const dateValue = new Date(this.value);
-                
-                // Obtener los minutos y ajustar a la media hora más cercana
-                const minutes = dateValue.getMinutes();
-                if (minutes !== 0 && minutes !== 30) {
-                    if (minutes < 15) {
-                        dateValue.setMinutes(0);
-                    } else if (minutes < 45) {
-                        dateValue.setMinutes(30);
-                    } else {
-                        dateValue.setMinutes(0);
-                        dateValue.setHours(dateValue.getHours() + 1);
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Configurar inputs de fecha/hora para permitir solo intervalos de media hora
+            const mediaHoraInputs = document.querySelectorAll('.media-hora-input');
+            
+            mediaHoraInputs.forEach(function(input) {
+                // Al enfocar el campo, añadir un manejador para cuando pierda el foco
+                input.addEventListener('blur', function() {
+                    if (!this.value) return;
+                    
+                    // Parsear el valor del datetime-local
+                    const dateValue = new Date(this.value);
+                    
+                    // Obtener los minutos y ajustar a la media hora más cercana
+                    const minutes = dateValue.getMinutes();
+                    if (minutes !== 0 && minutes !== 30) {
+                        if (minutes < 15) {
+                            dateValue.setMinutes(0);
+                        } else if (minutes < 45) {
+                            dateValue.setMinutes(30);
+                        } else {
+                            dateValue.setMinutes(0);
+                            dateValue.setHours(dateValue.getHours() + 1);
+                        }
+                        
+                        // Formatear de nuevo para datetime-local input (YYYY-MM-DDThh:mm)
+                        const year = dateValue.getFullYear();
+                        const month = String(dateValue.getMonth() + 1).padStart(2, '0');
+                        const day = String(dateValue.getDate()).padStart(2, '0');
+                        const hours = String(dateValue.getHours()).padStart(2, '0');
+                        const mins = String(dateValue.getMinutes()).padStart(2, '0');
+                        
+                        this.value = `${year}-${month}-${day}T${hours}:${mins}`;
                     }
-                    
-                    // Formatear de nuevo para datetime-local input (YYYY-MM-DDThh:mm)
-                    const year = dateValue.getFullYear();
-                    const month = String(dateValue.getMonth() + 1).padStart(2, '0');
-                    const day = String(dateValue.getDate()).padStart(2, '0');
-                    const hours = String(dateValue.getHours()).padStart(2, '0');
-                    const mins = String(dateValue.getMinutes()).padStart(2, '0');
-                    
-                    this.value = `${year}-${month}-${day}T${hours}:${mins}`;
-                }
+                });
             });
         });
-    });
-</script>
+
+        document.getElementById("abrir-modal-historial").onclick = function() {
+            document.getElementById("modal-historial").style.display = "block";
+        };
+
+        document.getElementById("cerrar-modal").onclick = function() {
+            document.getElementById("modal-historial").style.display = "none";
+        };
+
+        window.onclick = function(event) {
+            const modal = document.getElementById("modal-historial");
+            if (event.target == modal) {
+                modal.style.display = "none";
+            }
+        };
+    </script>
 
 </body>
 </html>
