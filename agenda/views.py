@@ -2,10 +2,10 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponseForbidden
 from django.utils import timezone
 from django.db.models import Q
-from .models import Evento, HistorialEvento
+from .models import Evento, HistorialEvento, ArchivoRespaldo
 from django.urls import reverse_lazy
 from django.contrib import messages
-from .forms import EventoForm
+from .forms import EventoForm, ArchivoRespaldoForm
 from usuarios.decorators import permiso_agenda_requerido, admin_agenda_requerido
 import openpyxl
 from django.http import HttpResponse
@@ -31,11 +31,25 @@ def agenda_home(request):
 
     return render(request, 'agenda/agenda_home.html', {'eventos': eventos})
 
+
 @permiso_agenda_requerido
 def crear_evento(request):
     if request.method == 'POST':
         form = EventoForm(request.POST)
+        archivos = request.FILES.getlist('archivo')  # múltiples archivos
+        form_archivos = ArchivoRespaldoForm()
+
         if form.is_valid():
+
+            if len(archivos) > 2:
+                messages.error(request, 'Solo puedes subir un máximo de 2 archivos.')
+                return render(request, 'agenda/evento_form.html', {'form': form})
+
+            peso_total = sum(a.size for a in archivos)
+            if peso_total > 2 * 1024 * 1024:
+                messages.error(request, 'El tamaño total de los archivos no puede superar los 2MB.')
+                return render(request, 'agenda/evento_form.html', {'form': form})
+
             evento = form.save(commit=False)
             evento.creador = request.user
             
@@ -53,6 +67,19 @@ def crear_evento(request):
                 return render(request, 'agenda/evento_form.html', {'form': form})
             
             evento.save()
+
+            # Guardar archivos
+            for archivo in archivos:
+                form_archivo = ArchivoRespaldoForm(files={'archivo': archivo})
+                if form_archivo.is_valid():
+                    archivo_obj = form_archivo.save(commit=False)
+                    archivo_obj.evento = evento
+                    archivo_obj.nombre_original = archivo.name
+                    archivo_obj.save()
+                else:
+                    messages.error(request, f"Archivo no válido: {archivo.name}")
+                    return render(request, 'agenda/evento_form.html', {'form': form})
+                
             messages.success(request, 'Evento creado exitosamente.')
 
             HistorialEvento.objects.create(
@@ -106,6 +133,8 @@ def editar_evento(request, pk):
     
     if request.method == 'POST':
         form = EventoForm(request.POST, instance=evento)
+        archivos = request.FILES.getlist('archivo')
+        form_archivos = ArchivoRespaldoForm()   
         if form.is_valid():
             evento_actualizado = form.save(commit=False)
             
@@ -123,6 +152,42 @@ def editar_evento(request, pk):
             evento_actualizado.save()
             evento_actualizado.actualizar_estado_automatico()
             evento_actualizado.save()
+            
+            # VALIDAR CANTIDAD
+            if len(archivos) + evento.archivos_respaldo.count() > 2:
+                messages.error(request, "Solo se permiten hasta 2 archivos de respaldo por evento.")
+                return render(request, 'agenda/evento_form.html', {
+                    'form': form,
+                    'evento': evento,
+                    'form_archivos': form_archivos
+                })
+
+            # VALIDAR PESO TOTAL
+            peso_total = sum(archivo.size for archivo in archivos)
+            if peso_total > 2 * 1024 * 1024:
+                messages.error(request, "El tamaño total de archivos no debe superar los 2MB.")
+                return render(request, 'agenda/evento_form.html', {
+                    'form': form,
+                    'evento': evento,
+                    'form_archivos': form_archivos
+                })
+
+            # GUARDAR ARCHIVOS
+            for archivo in archivos:
+                form_archivo = ArchivoRespaldoForm(files={'archivo': archivo})
+                if form_archivo.is_valid():
+                    archivo_obj = form_archivo.save(commit=False)
+                    archivo_obj.evento = evento_actualizado
+                    archivo_obj.nombre_original = archivo.name
+                    archivo_obj.save()
+                else:
+                    messages.error(request, f"Archivo no válido: {archivo.name}")
+                    return render(request, 'agenda/evento_form.html', {
+                        'form': form,
+                        'evento': evento,
+                        'form_archivos': ArchivoRespaldoForm()
+                    })
+
             messages.success(request, 'Evento actualizado exitosamente.')
 
             HistorialEvento.objects.create(
@@ -163,7 +228,11 @@ def editar_evento(request, pk):
     else:
         form = EventoForm(instance=evento)
     
-    return render(request, 'agenda/evento_form.html', {'form': form, 'evento': evento})
+    return render(request, 'agenda/evento_form.html', {
+        'form': form,
+        'evento': evento,
+        'form_archivos': ArchivoRespaldoForm()
+    })
 
 @permiso_agenda_requerido
 def eliminar_evento(request, pk):
@@ -405,3 +474,16 @@ def exportar_eventos_pdf(request):
     elements.append(table)
     doc.build(elements)
     return response
+
+@permiso_agenda_requerido
+def eliminar_archivo_respaldo(request, pk):
+    archivo = get_object_or_404(ArchivoRespaldo, pk=pk)
+    evento = archivo.evento
+
+    if request.user != evento.creador and not request.user.is_superuser:
+        return HttpResponseForbidden("No tienes permiso para eliminar este archivo.")
+
+    archivo.archivo.delete(save=False)
+    archivo.delete()
+    messages.success(request, "Archivo eliminado exitosamente.")
+    return redirect('editar_evento', pk=evento.pk)

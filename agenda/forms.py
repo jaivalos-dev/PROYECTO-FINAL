@@ -1,5 +1,5 @@
 from django import forms
-from .models import Evento
+from .models import Evento, ArchivoRespaldo
 from django.core.exceptions import ValidationError
 from datetime import datetime, timedelta
 import datetime as dt
@@ -152,3 +152,21 @@ class EventoForm(forms.ModelForm):
             instance.save()
         
         return instance
+    
+class ArchivoRespaldoForm(forms.ModelForm):
+    class Meta:
+        model = ArchivoRespaldo
+        fields = ['archivo']
+        widgets = {
+            'archivo': forms.FileInput(attrs={
+                'accept': '.pdf,.jpg,.jpeg,.png'
+            })
+        }
+
+    def clean_archivo(self):
+        archivo = self.cleaned_data.get('archivo')
+
+        if archivo:
+            if archivo.size > 2 * 1024 * 1024:  # archivo individual > 2MB
+                raise forms.ValidationError("El archivo no debe superar los 2MB.")
+        return archivo

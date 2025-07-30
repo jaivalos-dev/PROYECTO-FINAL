@@ -45,7 +45,7 @@
             <h1>{% if evento %}Editar Evento{% else %}Crear Nuevo Evento{% endif %}</h1>
         </div>
         
-        <form method="post">
+        <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
             
             <div class="form-group">
@@ -133,6 +133,14 @@
                 {% endfor %}
             </div>
             {% endif %}
+
+            <div class="form-group">
+                <label for="id_archivo">Archivos de respaldo (PDF, JPG, PNG) – máx. 2 archivos / 2MB total:</label>
+                <div id="drop-zone" class="drop-zone">
+                    <p>Arrastra y suelta los archivos aquí o haz clic para seleccionarlos</p>
+                    <input type="file" name="archivo" id="id_archivo" accept=".pdf,.jpg,.jpeg,.png" multiple hidden>
+                </div>
+            </div>
             
             <div class="button-group">
                 <button type="submit" class="btn-guardar">Guardar Evento</button>
@@ -142,6 +150,27 @@
                 {% endif %}
             </div>
         </form>
+
+        {% if evento.archivos_respaldo.all %}
+            <div class="archivos-respaldo-container">
+                <h3>Archivos de respaldo</h3>
+                <ul class="lista-archivos">
+                    {% for archivo in evento.archivos_respaldo.all %}
+                        <li>
+                            <a href="{{ archivo.archivo.url }}" target="_blank">
+                                📎 {{ archivo.nombre_original }}
+                            </a>
+                            {% if request.user == evento.creador or request.user.is_superuser %}
+                                <a href="{% url 'eliminar_archivo_respaldo' archivo.id %}" class="eliminar-archivo" onclick="return confirm('¿Estás seguro de eliminar este archivo?')">
+                                    ❌
+                                </a>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% endif %}
+
         {% if evento %}
             <div class="historial-wrapper">
                 <button id="abrir-modal-historial" class="btn-historial">
@@ -540,6 +569,54 @@
             text-align: center;
             margin-top: 30px;
         }
+
+        .archivos-respaldo-container {
+            margin-top: 30px;
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 5px solid #0D6EFD;
+        }
+
+        .archivos-respaldo-container h3 {
+            margin-bottom: 10px;
+            color: #0D6EFD;
+        }
+
+        .lista-archivos {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .lista-archivos li {
+            margin-bottom: 8px;
+            font-size: 15px;
+        }
+
+        .lista-archivos a {
+            color: #007bff;
+            text-decoration: none;
+            margin-right: 10px;
+        }
+
+        .lista-archivos a.eliminar-archivo {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .drop-zone {
+            border: 2px dashed #0D6EFD;
+            padding: 30px;
+            text-align: center;
+            border-radius: 8px;
+            background-color: #f0f8ff;
+            color: #0D6EFD;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        .drop-zone.hover {
+            background-color: #e6f2ff;
+        }
     </style>
 
     <script>
@@ -578,6 +655,60 @@
                     }
                 });
             });
+
+            const dropZone = document.getElementById('drop-zone');
+            const fileInput = document.getElementById('id_archivo');
+
+            // Hacer clic en el área abre el explorador
+            dropZone.addEventListener('click', () => fileInput.click());
+
+            // Cuando se seleccionan archivos manualmente
+            fileInput.addEventListener('change', (e) => {
+                dropZone.querySelector('p').textContent = `${fileInput.files.length} archivo(s) seleccionado(s)`;
+            });
+
+            // Drag & Drop
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('hover');
+            });
+
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('hover');
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('hover');
+
+                const validTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+                const files = Array.from(e.dataTransfer.files);
+
+                // Validar tipo
+                const invalidFiles = files.filter(file => !validTypes.includes(file.type));
+                if (invalidFiles.length > 0) {
+                    alert("Solo se permiten archivos PDF, JPG o PNG.");
+                    return;
+                }
+
+                // Validar cantidad
+                if (files.length > 2) {
+                    alert("Solo puedes subir un máximo de 2 archivos.");
+                    return;
+                }
+
+                // Validar tamaño total
+                const totalSize = files.reduce((acc, file) => acc + file.size, 0);
+                if (totalSize > 2 * 1024 * 1024) {
+                    alert("El tamaño total de los archivos no puede superar 2MB.");
+                    return;
+                }
+
+                // Asignar archivos si todo está bien
+                fileInput.files = e.dataTransfer.files;
+                dropZone.querySelector('p').textContent = `${files.length} archivo(s) seleccionado(s)`;
+            });
+
         });
 
         document.getElementById("abrir-modal-historial").onclick = function() {
