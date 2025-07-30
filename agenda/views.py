@@ -2,7 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponseForbidden
 from django.utils import timezone
 from django.db.models import Q
-from .models import Evento
+from .models import Evento, HistorialEvento
 from django.urls import reverse_lazy
 from django.contrib import messages
 from .forms import EventoForm
@@ -16,6 +16,7 @@ from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from django.core.mail import send_mail
+
 
 @permiso_agenda_requerido
 def agenda_home(request):
@@ -53,6 +54,13 @@ def crear_evento(request):
             
             evento.save()
             messages.success(request, 'Evento creado exitosamente.')
+
+            HistorialEvento.objects.create(
+                evento=evento,
+                usuario=request.user,
+                accion='creación',
+                descripcion='Evento creado por el usuario.'
+            )
 
             asunto = f'Evento creado: {evento.titulo}'
             mensaje = (
@@ -117,6 +125,13 @@ def editar_evento(request, pk):
             evento_actualizado.save()
             messages.success(request, 'Evento actualizado exitosamente.')
 
+            HistorialEvento.objects.create(
+                evento=evento_actualizado,
+                usuario=request.user,
+                accion='edición',
+                descripcion='Evento editado por el usuario.'
+            )
+
             asunto = f'Evento editado: {evento_actualizado.titulo}'
             mensaje = (
                 f"Hola {request.user.first_name or request.user.username},\n\n"
@@ -175,6 +190,14 @@ def eliminar_evento(request, pk):
             recipient_list=[request.user.email],
             fail_silently=False,
         )
+
+        HistorialEvento.objects.create(
+            evento=evento,
+            usuario=request.user,
+            accion='eliminación',
+            descripcion='Evento eliminado por el usuario.'
+        )
+
         evento.delete()
         messages.success(request, 'Evento eliminado exitosamente.')
 
@@ -193,6 +216,13 @@ def cancelar_evento(request, pk):
     if request.method == 'POST':
         evento.estado = 'cancelado'
         evento.save()
+
+        HistorialEvento.objects.create(
+            evento=evento,
+            usuario=request.user,
+            accion='cancelación',
+            descripcion='Evento cancelado por el usuario.'
+        )
 
         # Enviar correo al creador
         asunto = f"Evento cancelado: {evento.titulo}"

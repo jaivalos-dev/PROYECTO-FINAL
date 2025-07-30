@@ -32,17 +32,31 @@ class Evento(models.Model):
         return reverse('evento_detalle', args=[str(self.id)])
     
     def actualizar_estado_automatico(self):
-        now = timezone.now()  # ya es naive (sin zona horaria)
+        now = timezone.now()
 
         if self.estado == 'cancelado':
             return
 
+        nuevo_estado = None
         if now < self.fecha_inicio:
-            self.estado = 'agendado'
+            nuevo_estado = 'agendado'
         elif self.fecha_inicio <= now <= self.fecha_fin:
-            self.estado = 'en_curso'
+            nuevo_estado = 'en_curso'
         elif now > self.fecha_fin:
-            self.estado = 'finalizado'
+            nuevo_estado = 'finalizado'
+
+        if nuevo_estado and nuevo_estado != self.estado:
+            self.estado = nuevo_estado
+            self.save()
+
+            from .models import HistorialEvento  # para evitar import circular
+
+            HistorialEvento.objects.create(
+                evento=self,
+                usuario=None,  # SISTEMA
+                accion='actualización de estado',
+                descripcion=f"El sistema cambió el estado a '{self.get_estado_display()}'."
+            )
 
     def usuario_puede_modificar(self, user):
         return (
@@ -59,3 +73,17 @@ class Evento(models.Model):
         elif self.estado == 'cancelado':
             return '#DC3545'  # Rojo
         return self.color  # color original definido por el usuario
+    
+class HistorialEvento(models.Model):
+    evento = models.ForeignKey(Evento, on_delete=models.CASCADE, related_name='historial')
+    usuario = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
+    fecha = models.DateTimeField(auto_now_add=True)
+    accion = models.CharField(max_length=50)  # creación, edición, cancelación, estado, etc.
+    descripcion = models.TextField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['-fecha']  # lo más reciente primero
+
+    def __str__(self):
+        usuario_str = self.usuario.username if self.usuario else "SISTEMA"
+        return f"{self.accion.upper()} por {usuario_str} el {self.fecha.strftime('%d/%m/%Y %H:%M')}"
