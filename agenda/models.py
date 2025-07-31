@@ -61,6 +61,16 @@ class Evento(models.Model):
                 descripcion=f"El sistema cambió el estado a '{self.get_estado_display()}'."
             )
 
+    evento_padre = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name='repeticiones'
+    )
+            
+
+
     def usuario_puede_modificar(self, user):
         return (
             user == self.creador or

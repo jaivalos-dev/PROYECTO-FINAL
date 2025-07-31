@@ -25,6 +25,22 @@ class EventoForm(forms.ModelForm):
                 [(f'{h:02d}:30', f'{h:02d}:30') for h in range(24)],
         label="Hora de fin"
     )
+
+    repetir = forms.BooleanField(required=False, label="¿Repetir este evento?")
+    frecuencia = forms.ChoiceField(
+        choices=[
+            ('diaria', 'Diariamente'),
+            ('semanal', 'Semanalmente'),
+            ('mensual', 'Mensualmente'),
+        ],
+        required=False,
+        label="Frecuencia"
+    )
+    fecha_limite_repeticion = forms.DateField(
+        required=False,
+        widget=forms.DateInput(attrs={'type': 'date'}),
+        label="Repetir hasta"
+    )
     
     class Meta:
         model = Evento
@@ -138,6 +154,20 @@ class EventoForm(forms.ModelForm):
         # Guardar los valores procesados para ser usados en save()
         cleaned_data['fecha_inicio'] = fecha_inicio
         cleaned_data['fecha_fin'] = fecha_fin
+
+        if cleaned_data.get('repetir'):
+            frecuencia = cleaned_data.get('frecuencia')
+            fecha_limite = cleaned_data.get('fecha_limite_repeticion')
+            fecha_inicio = cleaned_data.get('fecha_inicio')
+
+            if not frecuencia or not fecha_limite:
+                raise ValidationError("Debes indicar la frecuencia y hasta cuándo repetir el evento.")
+
+            if fecha_inicio and fecha_limite:
+                max_fecha = fecha_inicio.date() + dt.timedelta(days=365)
+                if fecha_limite > max_fecha:
+                    raise ValidationError("La fecha límite de repetición no puede ser mayor a 1 año desde la fecha de inicio.")
+
         
         return cleaned_data
     
@@ -153,6 +183,8 @@ class EventoForm(forms.ModelForm):
         
         return instance
     
+
+
 class ArchivoRespaldoForm(forms.ModelForm):
     class Meta:
         model = ArchivoRespaldo
