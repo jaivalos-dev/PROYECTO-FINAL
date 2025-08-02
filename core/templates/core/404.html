@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Página no encontrada - Cámara de Comercio</title>
+    <meta http-equiv="refresh" content="5;url=/" />
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            text-align: center;
+        }
+        .logo {
+            margin-bottom: 20px;
+        }
+        .big-404 {
+            font-size: 120px;
+            font-weight: bold;
+        }
+        .message {
+            font-size: 24px;
+            margin: 10px 0;
+        }
+        .timer {
+            font-size: 18px;
+            color: #bbb;
+        }
+        a {
+            color: #0d6efd;
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="big-404">404</div>
+    <div class="message">¡Oops! Parece que te perdiste.</div>
+    <div class="message">La página que buscas está fuera de nuestro alcance.</div>
+    <div class="timer">Regresando al inicio en <span id="countdown">5</span> segundos...</div>
+    <div style="margin-top: 20px;">
+        <a href="/" style="color: aliceblue;">Ir al inicio ahora</a>
+    </div>
+
+    <script>
+        let seconds = 5;
+        const countdown = document.getElementById('countdown');
+        setInterval(() => {
+            seconds--;
+            if (seconds > 0) {
+                countdown.textContent = seconds;
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

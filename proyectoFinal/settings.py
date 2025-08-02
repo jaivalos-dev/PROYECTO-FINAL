@@ -25,9 +25,7 @@ SECRET_KEY = 'django-insecure-tp^&idy-yjpvk$pz$ksb5ydyb4!5q9*i@kgv=9-0u#ald#fcm(
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
-
-ALLOWED_HOSTS = []
-
+ALLOWED_HOSTS = ['*'] 
 
 # Application definition
 
@@ -146,3 +144,16 @@ EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'jaivalos.dev@gmail.com' 
 EMAIL_HOST_PASSWORD = 'ixdv vsuv nqkt twvu'  
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
+# LOGGING = {
+#     'version': 1,
+#     'handlers': {
+#         'console': {
+#             'class': 'logging.StreamHandler',
+#         },
+#     },
+#     'root': {
+#         'handlers': ['console'],
+#         'level': 'DEBUG',
+#     },
+# }
