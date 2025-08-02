@@ -25,7 +25,12 @@
         <div class="right">
             {% if user.is_authenticated %}
                 <span class="username">{{ user.username }}</span>
-                <a href="{% url 'logout' %}">Cerrar sesión</a>
+                <form method="POST" action="{% url 'logout' %}" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" style="background: none; border: none; color: #ffffff; text-decoration: none; cursor: pointer; padding: 0;">
+                        Cerrar sesión
+                    </button>
+                </form>
             {% else %}
                 <a href="{% url 'registro' %}">Registrarse</a>
                 <a href="{% url 'login' %}">Iniciar Sesión</a>
