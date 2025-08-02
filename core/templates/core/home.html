@@ -123,23 +123,29 @@
         }
 
         .btn-agenda {
+            padding: 12px 24px;
             background-color: #0D6EFD;
             color: white;
             border: none;
+            text-decoration: none;
         }
 
         .btn-agenda:hover {
             background-color: #0b5ed7;
+            cursor: pointer;
         }
 
         .btn-firma {
+            padding: 12px 24px;
             background-color: transparent;
             color: #0D6EFD;
             border: 2px solid #0D6EFD;
+            text-decoration: none;
         }
 
         .btn-firma:hover {
             background-color: rgba(13, 110, 253, 0.1);
+            cursor: pointer;
         }
 
 
@@ -222,8 +228,8 @@
             <p>Gestiona tus eventos de forma eficiente y firma documentos electrónicamente con total seguridad. Nuestro sistema te permite programar reuniones, recibir alertas de disponibilidad y firmar documentos de manera rápida y confiable.</p>
             
             <div class="buttons">
-                <button class="btn-agenda">Agenda</button>
-                <button class="btn-firma">Firma Electrónica</button>
+                <a href="{% url 'agenda_home' %}" class="btn-agenda">Agenda</a>
+                <a href="{% url 'firma_home' %}" class="btn-firma">Firma Electrónica</a>
             </div>
         </div>
         <div class="image-content">
