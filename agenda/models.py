@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from django.core.validators import FileExtensionValidator
 from django.conf import settings
+from django.utils.translation import gettext_lazy as _
 
 
 class Evento(models.Model):
@@ -24,6 +25,26 @@ class Evento(models.Model):
     creador = models.ForeignKey(User, on_delete=models.CASCADE, related_name='eventos_creados')
     estado = models.CharField(max_length=10, choices=ESTADO_CHOICES, default='agendado')
     fecha_creacion = models.DateTimeField(auto_now_add=True)
+
+    repetir = models.BooleanField(default=False, verbose_name="¿Es recurrente?")
+    
+    class FrecuenciaOpciones(models.TextChoices):
+        DIARIO = 'diario', _('Diario')
+        SEMANAL = 'semanal', _('Semanal')
+        MENSUAL = 'mensual', _('Mensual')
+
+    frecuencia = models.CharField(
+        max_length=10,
+        choices=FrecuenciaOpciones.choices,
+        default=FrecuenciaOpciones.DIARIO,
+        blank=True,
+        null=True
+    )
+    fecha_limite_repeticion = models.DateField(
+        blank=True,
+        null=True,
+        verbose_name="Fecha límite de repetición"
+    )
     
     class Meta:
         ordering = ['-fecha_inicio']

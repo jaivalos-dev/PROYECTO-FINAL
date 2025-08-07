@@ -174,13 +174,18 @@ class EventoForm(forms.ModelForm):
     def save(self, commit=True):
         instance = super(EventoForm, self).save(commit=False)
         
-        # Asignar los valores de fecha y hora procesados
+        # Asignar las fechas
         instance.fecha_inicio = self.cleaned_data['fecha_inicio']
         instance.fecha_fin = self.cleaned_data['fecha_fin']
         
+        # Asignar configuración de recurrencia
+        instance.repetir = self.cleaned_data.get('repetir', False)
+        instance.frecuencia = self.cleaned_data.get('frecuencia') or None
+        instance.fecha_limite_repeticion = self.cleaned_data.get('fecha_limite_repeticion') or None
+
         if commit:
             instance.save()
-        
+
         return instance
     
 

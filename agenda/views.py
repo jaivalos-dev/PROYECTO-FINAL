@@ -100,15 +100,16 @@ def crear_evento(request):
 
             evento.save()
 
-            fecha_limite = dt.datetime.combine(form.cleaned_data['fecha_limite_repeticion'], dt.time.min)
             # Si es recurrente, generar repeticiones
             if form.cleaned_data.get('repetir'):
                 frecuencia = form.cleaned_data['frecuencia']
                 fecha_inicio = form.cleaned_data['fecha_inicio']
                 fecha_fin = form.cleaned_data['fecha_fin']
+                fecha_limite = dt.datetime.combine(form.cleaned_data['fecha_limite_repeticion'], dt.time.min)
 
                 fecha_base_inicio = fecha_inicio
                 fecha_base_fin = fecha_fin
+                contador = 0
 
                 while True:
                     # Avanzar a la siguiente repetición
@@ -119,11 +120,10 @@ def crear_evento(request):
                         fecha_base_inicio += dt.timedelta(weeks=1)
                         fecha_base_fin += dt.timedelta(weeks=1)
                     elif frecuencia == 'mensual':
-                        # lógica mensual básica: sumar un mes (simplificado para 28 días)
                         mes = fecha_base_inicio.month + 1
                         anio = fecha_base_inicio.year + (mes - 1) // 12
                         mes = (mes - 1) % 12 + 1
-                        dia = min(fecha_base_inicio.day, 28)  # evitar errores
+                        dia = min(fecha_base_inicio.day, 28)
                         fecha_base_inicio = dt.datetime(anio, mes, dia, fecha_base_inicio.hour, fecha_base_inicio.minute)
                         fecha_base_fin = fecha_base_inicio + (fecha_fin - fecha_inicio)
 
@@ -140,8 +140,16 @@ def crear_evento(request):
                         color=evento.color,
                         creador=evento.creador,
                         estado='agendado',
+                        repetir=False,  # eventos hijos no deben poder generar más eventos
+                        frecuencia=frecuencia,
+                        fecha_limite_repeticion=form.cleaned_data['fecha_limite_repeticion'],
                         evento_padre=evento
                     )
+
+                    contador += 1
+                    if contador > 100:
+                        messages.warning(request, "Se alcanzó el límite de 100 repeticiones. Solo se generaron las primeras 100.")
+                        break
 
             # Guardar archivos
             for archivo in archivos:
