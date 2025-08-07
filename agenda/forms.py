@@ -53,7 +53,7 @@ class EventoForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         instance = kwargs.get('instance', None)
         super(EventoForm, self).__init__(*args, **kwargs)
-        
+
         # Ordenar correctamente las opciones de hora
         hora_choices = []
         for h in range(24):
@@ -121,10 +121,10 @@ class EventoForm(forms.ModelForm):
             self.initial['fecha_fin_hora'] = f'{hora:02d}:{minutos:02d}'
 
         if instance and instance.pk:
-            # Solo ocultar si es edición
-            self.fields['repetir'].widget = forms.HiddenInput()
-            self.fields['frecuencia'].widget = forms.HiddenInput()
-            self.fields['fecha_limite_repeticion'].widget = forms.HiddenInput()
+            # 🔒 Si el evento es parte de una serie, deshabilitar campos de fecha/hora
+            if instance.evento_padre or instance.repeticiones.exists():
+                self.fields['fecha_inicio_fecha'].widget.attrs['readonly'] = True
+                self.fields['fecha_fin_fecha'].widget.attrs['readonly'] = True
     
     def clean(self):
         cleaned_data = super().clean()

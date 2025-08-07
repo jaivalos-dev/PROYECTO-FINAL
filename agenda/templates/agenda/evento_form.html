@@ -50,6 +50,13 @@
             <h1>{% if evento %}Editar Evento{% else %}Crear Nuevo Evento{% endif %}</h1>
         </div>
         
+        {% if evento.evento_padre or evento.repeticiones.exists %}
+            <div class="alerta-edicion-serie" style="background-color: #fff3cd; color: #664d03; border: 1px solid #ffecb5; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+                ⚠️ Este evento pertenece a una serie recurrente. <br>
+                <strong>Los cambios que realices se aplicarán a todos los eventos de la serie.</strong>
+            </div>
+        {% endif %}
+
         <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
             

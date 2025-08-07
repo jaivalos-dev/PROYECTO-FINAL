@@ -204,6 +204,33 @@ def editar_evento(request, pk):
         form_archivos = ArchivoRespaldoForm()   
         if form.is_valid():
             evento_actualizado = form.save(commit=False)
+
+        # Determinar el evento padre
+        evento_raiz = evento.evento_padre if evento.evento_padre else evento
+
+        # Calcular duración nueva
+        nueva_duracion = evento_actualizado.fecha_fin - evento_actualizado.fecha_inicio
+
+        # Aplicar cambios a los eventos de la serie
+        for ev in evento_raiz.repeticiones.exclude(id=evento.pk):
+            offset = ev.fecha_inicio - evento.fecha_inicio  # distancia original respecto al evento editado
+
+            ev.fecha_inicio = evento_actualizado.fecha_inicio + offset
+            ev.fecha_fin = ev.fecha_inicio + nueva_duracion
+
+            ev.titulo = evento_actualizado.titulo
+            ev.descripcion = evento_actualizado.descripcion
+            ev.ubicacion = evento_actualizado.ubicacion
+            ev.organizador = evento_actualizado.organizador
+            ev.color = evento_actualizado.color
+            ev.save()
+
+            HistorialEvento.objects.create(
+                evento=ev,
+                usuario=request.user,
+                accion='edición',
+                descripcion='Evento actualizado como parte de una edición masiva de la serie.'
+            )
             
             # Verificar si hay eventos traslapados, excluyendo el evento actual
             eventos_traslapados = Evento.objects.filter(
