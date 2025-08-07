@@ -243,7 +243,20 @@ def editar_evento(request, pk):
             
             if eventos_traslapados.exists():
                 messages.error(request, f'Ya existe un evento agendado en ese horario: "{eventos_traslapados.first().titulo}"')
-                return render(request, 'agenda/evento_form.html', {'form': form, 'evento': evento})
+                # Mostrar archivos del padre si el evento es hijo
+                archivos_a_mostrar = evento.archivos_respaldo.all()
+                mostrar_mensaje_archivos_del_padre = False
+
+                if evento.evento_padre:
+                    archivos_a_mostrar = evento.evento_padre.archivos_respaldo.all()
+                    mostrar_mensaje_archivos_del_padre = True
+                return render(request, 'agenda/evento_form.html', {
+                    'form': form,
+                    'evento': evento,
+                    'form_archivos': ArchivoRespaldoForm(),
+                    'archivos_respaldo': archivos_a_mostrar,
+                    'mostrar_mensaje_archivos_del_padre': mostrar_mensaje_archivos_del_padre
+                })
             
             form.cleaned_data['repetir'] = evento.repetir
             form.cleaned_data['frecuencia'] = evento.frecuencia
@@ -256,20 +269,38 @@ def editar_evento(request, pk):
             # VALIDAR CANTIDAD
             if len(archivos) + evento.archivos_respaldo.count() > 2:
                 messages.error(request, "Solo se permiten hasta 2 archivos de respaldo por evento.")
+                # Mostrar archivos del padre si el evento es hijo
+                archivos_a_mostrar = evento.archivos_respaldo.all()
+                mostrar_mensaje_archivos_del_padre = False
+
+                if evento.evento_padre:
+                    archivos_a_mostrar = evento.evento_padre.archivos_respaldo.all()
+                    mostrar_mensaje_archivos_del_padre = True
                 return render(request, 'agenda/evento_form.html', {
                     'form': form,
                     'evento': evento,
-                    'form_archivos': form_archivos
+                    'form_archivos': ArchivoRespaldoForm(),
+                    'archivos_respaldo': archivos_a_mostrar,
+                    'mostrar_mensaje_archivos_del_padre': mostrar_mensaje_archivos_del_padre
                 })
 
             # VALIDAR PESO TOTAL
             peso_total = sum(archivo.size for archivo in archivos)
             if peso_total > 2 * 1024 * 1024:
                 messages.error(request, "El tamaño total de archivos no debe superar los 2MB.")
+                # Mostrar archivos del padre si el evento es hijo
+                archivos_a_mostrar = evento.archivos_respaldo.all()
+                mostrar_mensaje_archivos_del_padre = False
+
+                if evento.evento_padre:
+                    archivos_a_mostrar = evento.evento_padre.archivos_respaldo.all()
+                    mostrar_mensaje_archivos_del_padre = True
                 return render(request, 'agenda/evento_form.html', {
                     'form': form,
                     'evento': evento,
-                    'form_archivos': form_archivos
+                    'form_archivos': ArchivoRespaldoForm(),
+                    'archivos_respaldo': archivos_a_mostrar,
+                    'mostrar_mensaje_archivos_del_padre': mostrar_mensaje_archivos_del_padre
                 })
 
             # GUARDAR ARCHIVOS
@@ -282,10 +313,19 @@ def editar_evento(request, pk):
                     archivo_obj.save()
                 else:
                     messages.error(request, f"Archivo no válido: {archivo.name}")
+                    # Mostrar archivos del padre si el evento es hijo
+                    archivos_a_mostrar = evento.archivos_respaldo.all()
+                    mostrar_mensaje_archivos_del_padre = False
+
+                    if evento.evento_padre:
+                        archivos_a_mostrar = evento.evento_padre.archivos_respaldo.all()
+                        mostrar_mensaje_archivos_del_padre = True
                     return render(request, 'agenda/evento_form.html', {
                         'form': form,
                         'evento': evento,
-                        'form_archivos': ArchivoRespaldoForm()
+                        'form_archivos': ArchivoRespaldoForm(),
+                        'archivos_respaldo': archivos_a_mostrar,
+                        'mostrar_mensaje_archivos_del_padre': mostrar_mensaje_archivos_del_padre
                     })
 
             messages.success(request, 'Evento actualizado exitosamente.')
@@ -328,10 +368,19 @@ def editar_evento(request, pk):
     else:
         form = EventoForm(instance=evento)
     
+    # Mostrar archivos del padre si el evento es hijo
+    archivos_a_mostrar = evento.archivos_respaldo.all()
+    mostrar_mensaje_archivos_del_padre = False
+
+    if evento.evento_padre:
+        archivos_a_mostrar = evento.evento_padre.archivos_respaldo.all()
+        mostrar_mensaje_archivos_del_padre = True
     return render(request, 'agenda/evento_form.html', {
         'form': form,
         'evento': evento,
-        'form_archivos': ArchivoRespaldoForm()
+        'form_archivos': ArchivoRespaldoForm(),
+        'archivos_respaldo': archivos_a_mostrar,
+        'mostrar_mensaje_archivos_del_padre': mostrar_mensaje_archivos_del_padre
     })
 
 @permiso_agenda_requerido

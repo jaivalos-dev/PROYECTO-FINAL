@@ -192,19 +192,28 @@
             </div>
         </form>
 
-        {% if evento.archivos_respaldo.all %}
+        {% if archivos_respaldo %}
             <div class="archivos-respaldo-container">
                 <h3>Archivos de respaldo</h3>
+
+                {% if mostrar_mensaje_archivos_del_padre %}
+                    <p style="font-size: 0.9rem; color: #856404; margin-bottom: 10px;">
+                        📎 Estos archivos pertenecen al evento principal de esta serie.
+                    </p>
+                {% endif %}
+
                 <ul class="lista-archivos">
-                    {% for archivo in evento.archivos_respaldo.all %}
+                    {% for archivo in archivos_respaldo %}
                         <li>
                             <a href="{{ archivo.archivo.url }}" target="_blank">
                                 📎 {{ archivo.nombre_original }}
                             </a>
-                            {% if request.user == evento.creador or request.user.is_superuser %}
+                            {% if not evento.evento_padre %}
+                                {% if request.user == evento.creador or request.user.is_superuser %}
                                 <a href="{% url 'eliminar_archivo_respaldo' archivo.id %}" class="eliminar-archivo" onclick="return confirm('¿Estás seguro de eliminar este archivo?')">
                                     ❌
                                 </a>
+                                {% endif %}
                             {% endif %}
                         </li>
                     {% endfor %}
