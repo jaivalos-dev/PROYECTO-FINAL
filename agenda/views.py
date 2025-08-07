@@ -232,6 +232,10 @@ def editar_evento(request, pk):
                 messages.error(request, f'Ya existe un evento agendado en ese horario: "{eventos_traslapados.first().titulo}"')
                 return render(request, 'agenda/evento_form.html', {'form': form, 'evento': evento})
             
+            form.cleaned_data['repetir'] = evento.repetir
+            form.cleaned_data['frecuencia'] = evento.frecuencia
+            form.cleaned_data['fecha_limite_repeticion'] = evento.fecha_limite_repeticion   
+
             evento_actualizado.save()
             evento_actualizado.actualizar_estado_automatico()
             evento_actualizado.save()

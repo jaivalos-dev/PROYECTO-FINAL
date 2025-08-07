@@ -148,29 +148,31 @@
             </div>
 
 
-            <div class="form-group">
-                <label>
-                    {{ form.repetir }} <span>¿Repetir este evento?</span>
-                </label>
-            </div>
-
-            <div id="campos-recurrencia" style="display: none;">
+            {% if not evento %}
                 <div class="form-group">
-                    <label for="id_frecuencia">Frecuencia:</label>
-                    {{ form.frecuencia }}
-                    {% if form.frecuencia.errors %}
-                    <div class="error">{{ form.frecuencia.errors }}</div>
-                    {% endif %}
+                    <label>
+                        {{ form.repetir }} <span>¿Repetir este evento?</span>
+                    </label>
                 </div>
 
-                <div class="form-group">
-                    <label for="id_fecha_limite_repeticion">Repetir hasta:</label>
-                    {{ form.fecha_limite_repeticion }}
-                    {% if form.fecha_limite_repeticion.errors %}
-                    <div class="error">{{ form.fecha_limite_repeticion.errors }}</div>
-                    {% endif %}
+                <div id="campos-recurrencia" style="display: none;">
+                    <div class="form-group">
+                        <label for="id_frecuencia">Frecuencia:</label>
+                        {{ form.frecuencia }}
+                        {% if form.frecuencia.errors %}
+                        <div class="error">{{ form.frecuencia.errors }}</div>
+                        {% endif %}
+                    </div>
+
+                    <div class="form-group">
+                        <label for="id_fecha_limite_repeticion">Repetir hasta:</label>
+                        {{ form.fecha_limite_repeticion }}
+                        {% if form.fecha_limite_repeticion.errors %}
+                        <div class="error">{{ form.fecha_limite_repeticion.errors }}</div>
+                        {% endif %}
+                    </div>
                 </div>
-            </div>
+            {% endif %}
 
             <div class="button-group">
                 <button type="submit" class="btn-guardar">Guardar Evento</button>
