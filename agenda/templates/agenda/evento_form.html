@@ -146,13 +146,15 @@
             </div>
             {% endif %}
 
-            <div class="form-group">
-                <label for="id_archivo">Archivos de respaldo (PDF, JPG, PNG) – máx. 2 archivos / 2MB total:</label>
-                <div id="drop-zone" class="drop-zone">
-                    <p>Arrastra y suelta los archivos aquí o haz clic para seleccionarlos</p>
-                    <input type="file" name="archivo" id="id_archivo" accept=".pdf,.jpg,.jpeg,.png" multiple hidden>
+            {% if not evento or not evento.evento_padre %}
+                <div class="form-group">
+                    <label for="id_archivo">Archivos de respaldo (PDF, JPG, PNG) – máx. 2 archivos / 2MB total:</label>
+                    <div id="drop-zone" class="drop-zone">
+                        <p>Arrastra y suelta los archivos aquí o haz clic para seleccionarlos</p>
+                        <input type="file" name="archivo" id="id_archivo" accept=".pdf,.jpg,.jpeg,.png" multiple hidden>
+                    </div>
                 </div>
-            </div>
+            {% endif %}
 
 
             {% if not evento %}

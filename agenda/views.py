@@ -201,6 +201,8 @@ def editar_evento(request, pk):
     if request.method == 'POST':
         form = EventoForm(request.POST, instance=evento)
         archivos = request.FILES.getlist('archivo')
+        if evento.evento_padre:
+            archivos = []   
         form_archivos = ArchivoRespaldoForm()   
         if form.is_valid():
             evento_actualizado = form.save(commit=False)
