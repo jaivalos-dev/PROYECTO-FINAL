@@ -37,10 +37,23 @@
         <div class="confirm-box">
             <h2>Confirmar Cancelación</h2>
             <p>¿Estás seguro que deseas cancelar el evento "{{ evento.titulo }}"?</p>
-            <p class="event-details">Evento programado para el {{ evento.fecha_inicio|date:"d/m/Y" }} a las {{ evento.fecha_inicio|date:"H:i" }}</p>
-            
+            <p class="event-details">Evento programado para el {{ evento.fecha_inicio|date:"d/m/Y" }} a las {{ evento.fecha_inicio|date:"H:i" }}</p> 
             <form method="post">
                 {% csrf_token %}
+
+                {% if evento.evento_padre or evento.repeticiones.exists %}
+                <div class="form-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="cancelar_serie" value="1" id="cancelar-serie-checkbox">
+                        Cancelar toda la serie de eventos relacionados
+                    </label>
+                </div>
+
+                <div id="mensaje-cancelacion-serie" style="display: none;" class="alerta-cancelacion">
+                    ⚠ Esta acción cancelará todos los eventos relacionados con esta serie.
+                </div>
+                {% endif %}
+
                 <div class="button-group">
                     <button type="submit" class="btn-cancelar-evento">Sí, Cancelar Evento</button>
                     <a href="{% url 'agenda_home' %}" class="btn-regresar">No, Regresar</a>
@@ -199,6 +212,38 @@
         .footer a:hover {
             opacity: 0.7;
         }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 500;
+            margin-bottom: 10px;
+        }
+
+        #mensaje-cancelacion-serie {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 0.95rem;
+            margin-bottom: 15px;
+        }
     </style>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const checkbox = document.getElementById("cancelar-serie-checkbox");
+            const mensaje = document.getElementById("mensaje-cancelacion-serie");
+
+            if (checkbox && mensaje) {
+                checkbox.addEventListener("change", function () {
+                    mensaje.style.display = this.checked ? "block" : "none";
+                });
+            }
+        });
+    </script>
+
 </body>
 </html>

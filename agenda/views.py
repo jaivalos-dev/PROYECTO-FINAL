@@ -354,36 +354,45 @@ def cancelar_evento(request, pk):
         return HttpResponseForbidden("No tienes permiso para cancelar este evento.")
 
     if request.method == 'POST':
-        evento.estado = 'cancelado'
-        evento.save()
+        cancelar_serie = request.POST.get('cancelar_serie') == '1'
 
-        HistorialEvento.objects.create(
-            evento=evento,
-            usuario=request.user,
-            accion='cancelación',
-            descripcion='Evento cancelado por el usuario.'
-        )
+        if cancelar_serie:
+            # Si es hijo, cancelamos desde el padre
+            padre = evento.evento_padre if evento.evento_padre else evento
 
-        # Enviar correo al creador
-        asunto = f"Evento cancelado: {evento.titulo}"
-        mensaje = (
-            f"Hola {evento.creador.first_name or evento.creador.username},\n\n"
-            f"Tu evento '{evento.titulo}' ha sido cancelado correctamente.\n"
-            f"Fecha y hora: {evento.fecha_inicio.strftime('%d/%m/%Y %H:%M')} a {evento.fecha_fin.strftime('%d/%m/%Y %H:%M')}\n"
-            f"Ubicación: {evento.ubicacion or 'No especificada'}\n"
-            f"Estado actual: {evento.get_estado_display()}\n\n"
-            f"Gracias por mantener tu agenda actualizada.\n"
-        )
+            eventos_a_cancelar = [padre] + list(padre.repeticiones.all())
+        else:
+            eventos_a_cancelar = [evento]
 
-        send_mail(
-            subject=asunto,
-            message=mensaje,
-            from_email=None,
-            recipient_list=[evento.creador.email],
-            fail_silently=False,
-        )
+        for ev in eventos_a_cancelar:
+            ev.estado = 'cancelado'
+            ev.save()
 
-        messages.success(request, 'Evento cancelado y notificado por correo exitosamente.')
+            HistorialEvento.objects.create(
+                evento=ev,
+                usuario=request.user,
+                accion='cancelación',
+                descripcion='Evento cancelado por el usuario como parte de una cancelación individual o masiva.'
+            )
+
+            # Enviar correo solo si no es SISTEMA (opcional)
+            if ev.creador.email:
+                send_mail(
+                    subject=f"Evento cancelado: {ev.titulo}",
+                    message=(
+                        f"Hola {ev.creador.first_name or ev.creador.username},\n\n"
+                        f"Tu evento '{ev.titulo}' ha sido cancelado correctamente.\n"
+                        f"Fecha y hora: {ev.fecha_inicio.strftime('%d/%m/%Y %H:%M')} a {ev.fecha_fin.strftime('%d/%m/%Y %H:%M')}\n"
+                        f"Ubicación: {ev.ubicacion or 'No especificada'}\n"
+                        f"Estado actual: {ev.get_estado_display()}\n\n"
+                        f"Gracias por mantener tu agenda actualizada.\n"
+                    ),
+                    from_email=None,
+                    recipient_list=[ev.creador.email],
+                    fail_silently=False,
+                )
+
+        messages.success(request, f"Se canceló correctamente el evento{' y su serie completa' if cancelar_serie else ''}.")
         return redirect('agenda_home')
 
     return render(request, 'agenda/evento_confirm_cancel.html', {'evento': evento})
