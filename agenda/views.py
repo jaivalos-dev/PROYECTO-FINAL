@@ -67,37 +67,6 @@ def crear_evento(request):
                 messages.error(request, f'Ya existe un evento agendado en ese horario: "{eventos_traslapados.first().titulo}"')
                 return render(request, 'agenda/evento_form.html', {'form': form})
             
-            # Validar límite de repeticiones antes de guardar evento
-            if form.cleaned_data.get('repetir'):
-                frecuencia = form.cleaned_data['frecuencia']
-                fecha_inicio = form.cleaned_data['fecha_inicio']
-                fecha_fin = form.cleaned_data['fecha_fin']
-                fecha_limite = dt.datetime.combine(form.cleaned_data['fecha_limite_repeticion'], dt.time.min)
-
-                eventos_generados = []
-                fecha_base = fecha_inicio
-
-                fecha_limite = dt.datetime.combine(fecha_limite, dt.time.min)
-
-                while fecha_base <= fecha_limite:
-                    eventos_generados.append(fecha_base)
-
-                    if frecuencia == 'diaria':
-                        fecha_base += dt.timedelta(days=1)
-                    elif frecuencia == 'semanal':
-                        fecha_base += dt.timedelta(weeks=1)
-                    elif frecuencia == 'mensual':
-                        # avanzar al mismo día del mes siguiente (simplificado)
-                        mes = fecha_base.month + 1
-                        anio = fecha_base.year + (mes - 1) // 12
-                        mes = (mes - 1) % 12 + 1
-                        dia = min(fecha_base.day, 28)  # evitar errores con días inexistentes
-                        fecha_base = dt.datetime(anio, mes, dia, fecha_base.hour, fecha_base.minute)
-
-                    if len(eventos_generados) > 100:
-                        messages.error(request, "No puedes generar más de 100 eventos recurrentes.")
-                        return render(request, 'agenda/evento_form.html', {'form': form})
-
             evento.save()
 
             # Si es recurrente, generar repeticiones
@@ -130,7 +99,7 @@ def crear_evento(request):
                     if fecha_base_inicio > fecha_limite:
                         break
 
-                    Evento.objects.create(
+                    evento_hijo = Evento.objects.create(
                         titulo=evento.titulo,
                         descripcion=evento.descripcion,
                         fecha_inicio=fecha_base_inicio,
@@ -140,16 +109,31 @@ def crear_evento(request):
                         color=evento.color,
                         creador=evento.creador,
                         estado='agendado',
-                        repetir=False,  # eventos hijos no deben poder generar más eventos
+                        repetir=False,
                         frecuencia=frecuencia,
                         fecha_limite_repeticion=form.cleaned_data['fecha_limite_repeticion'],
                         evento_padre=evento
+                    )
+
+                    HistorialEvento.objects.create(
+                        evento=evento_hijo,
+                        usuario=None,
+                        accion='creación',
+                        descripcion=f'Evento creado automáticamente como repetición del evento \"{evento.titulo}\".'
                     )
 
                     contador += 1
                     if contador > 100:
                         messages.warning(request, "Se alcanzó el límite de 100 repeticiones. Solo se generaron las primeras 100.")
                         break
+                
+                if contador > 0:
+                    HistorialEvento.objects.create(
+                        evento=evento,
+                        usuario=None,
+                        accion='creación',
+                        descripcion=f'Se generaron automáticamente {contador} evento(s) recurrentes como parte de esta serie.'
+                    )
 
             # Guardar archivos
             for archivo in archivos:

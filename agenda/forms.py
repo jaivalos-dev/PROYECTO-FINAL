@@ -120,9 +120,11 @@ class EventoForm(forms.ModelForm):
                 hora = (hora + 1) % 24
             self.initial['fecha_fin_hora'] = f'{hora:02d}:{minutos:02d}'
 
-        self.fields['repetir'].widget = forms.HiddenInput()
-        self.fields['frecuencia'].widget = forms.HiddenInput()
-        self.fields['fecha_limite_repeticion'].widget = forms.HiddenInput()
+        if instance and instance.pk:
+            # Solo ocultar si es edición
+            self.fields['repetir'].widget = forms.HiddenInput()
+            self.fields['frecuencia'].widget = forms.HiddenInput()
+            self.fields['fecha_limite_repeticion'].widget = forms.HiddenInput()
     
     def clean(self):
         cleaned_data = super().clean()
