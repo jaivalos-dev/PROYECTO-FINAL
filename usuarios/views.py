@@ -6,41 +6,41 @@ from django.contrib.auth.models import User
 from .forms import UsuarioRegistroForm, PerfilForm, LoginForm, PerfilPermisoForm
 from django.shortcuts import render
 
-def registro_usuario(request):
-    if request.method == 'POST':
-        form_usuario = UsuarioRegistroForm(request.POST)
-        form_perfil = PerfilForm(request.POST)
+# def registro_usuario(request):
+#     if request.method == 'POST':
+#         form_usuario = UsuarioRegistroForm(request.POST)
+#         form_perfil = PerfilForm(request.POST)
         
-        if form_usuario.is_valid() and form_perfil.is_valid():
-            usuario = form_usuario.save()
+#         if form_usuario.is_valid() and form_perfil.is_valid():
+#             usuario = form_usuario.save()
             
-            # Completar datos del perfil
-            perfil = usuario.perfil
-            perfil.telefono = form_perfil.cleaned_data.get('telefono')
-            perfil.departamento = form_perfil.cleaned_data.get('departamento')
-            perfil.puesto = form_perfil.cleaned_data.get('puesto')
-            perfil.nombre_completo = f"{usuario.first_name} {usuario.last_name}"
-            perfil.save()
+#             # Completar datos del perfil
+#             perfil = usuario.perfil
+#             perfil.telefono = form_perfil.cleaned_data.get('telefono')
+#             perfil.departamento = form_perfil.cleaned_data.get('departamento')
+#             perfil.puesto = form_perfil.cleaned_data.get('puesto')
+#             perfil.nombre_completo = f"{usuario.first_name} {usuario.last_name}"
+#             perfil.save()
             
-            # Por defecto, los usuarios nuevos no tienen permisos
-            # Los administradores deben asignar permisos manualmente
+#             # Por defecto, los usuarios nuevos no tienen permisos
+#             # Los administradores deben asignar permisos manualmente
             
-            # Iniciar sesión automáticamente
-            username = form_usuario.cleaned_data.get('username')
-            password = form_usuario.cleaned_data.get('password1')
-            user = authenticate(username=username, password=password)
-            login(request, user)
+#             # Iniciar sesión automáticamente
+#             username = form_usuario.cleaned_data.get('username')
+#             password = form_usuario.cleaned_data.get('password1')
+#             user = authenticate(username=username, password=password)
+#             login(request, user)
             
-            messages.success(request, f"¡Registro exitoso! Bienvenido/a, {username}. Un administrador revisará tu cuenta para asignar los permisos correspondientes.")
-            return redirect('home')
-    else:
-        form_usuario = UsuarioRegistroForm()
-        form_perfil = PerfilForm()
+#             messages.success(request, f"¡Registro exitoso! Bienvenido/a, {username}. Un administrador revisará tu cuenta para asignar los permisos correspondientes.")
+#             return redirect('home')
+#     else:
+#         form_usuario = UsuarioRegistroForm()
+#         form_perfil = PerfilForm()
     
-    return render(request, 'usuarios/registro.html', {
-        'form_usuario': form_usuario,
-        'form_perfil': form_perfil
-    })
+#     return render(request, 'usuarios/registro.html', {
+#         'form_usuario': form_usuario,
+#         'form_perfil': form_perfil
+#     })
 
 def login_usuario(request):
     if request.method == 'POST':
