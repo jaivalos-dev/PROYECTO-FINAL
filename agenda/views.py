@@ -6,7 +6,7 @@ from .models import Evento, HistorialEvento, ArchivoRespaldo
 from django.urls import reverse_lazy
 from django.contrib import messages
 from .forms import EventoForm, ArchivoRespaldoForm
-from usuarios.decorators import permiso_agenda_requerido, admin_agenda_requerido
+from usuarios.decorators import permiso_agenda_requerido, solo_creador_o_admin
 import openpyxl
 from django.http import HttpResponse
 from django.utils.dateparse import parse_datetime
@@ -190,6 +190,7 @@ def crear_evento(request):
     return render(request, 'agenda/evento_form.html', {'form': form})
 
 @permiso_agenda_requerido
+@solo_creador_o_admin
 def editar_evento(request, pk):
     evento = get_object_or_404(Evento, pk=pk)
     
@@ -384,6 +385,7 @@ def editar_evento(request, pk):
     })
 
 @permiso_agenda_requerido
+@solo_creador_o_admin
 def eliminar_evento(request, pk):
     evento = get_object_or_404(Evento, pk=pk)
     
@@ -424,6 +426,7 @@ def eliminar_evento(request, pk):
     return render(request, 'agenda/evento_confirm_delete.html', {'evento': evento})
 
 @permiso_agenda_requerido
+@solo_creador_o_admin
 def cancelar_evento(request, pk):
     evento = get_object_or_404(Evento, pk=pk)
 

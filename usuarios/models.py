@@ -29,7 +29,11 @@ class Perfil(models.Model):
     telefono = models.CharField(max_length=15, blank=True)
     departamento = models.CharField(max_length=50, choices=DEPARTAMENTO_CHOICES, default='otro')
     puesto = models.CharField(max_length=100, blank=True)
-    
+    ROL_CHOICES = (
+        ('admin', 'Administrador'),
+        ('operador', 'Operador'),
+    )
+    rol = models.CharField(max_length=10, choices=ROL_CHOICES, default='operador')
     # Simplificación del sistema de permisos
     tipo_permiso = models.CharField(max_length=10, choices=TIPO_PERMISO_CHOICES, default='ninguno')
     
@@ -62,9 +66,15 @@ class Perfil(models.Model):
 
 # Señales para crear/actualizar perfil cuando se crea/actualiza usuario
 @receiver(post_save, sender=User)
-def crear_perfil(sender, instance, created, **kwargs):
+def crear_o_guardar_perfil(sender, instance, created, **kwargs):
     if created:
-        Perfil.objects.create(usuario=instance)
+        Perfil.objects.create(usuario=instance)  # se crea automático al crear usuario
+    else:
+        # Si por alguna razón no existe, la creamos (robusto ante datos viejos)
+        if not hasattr(instance, 'perfil'):
+            Perfil.objects.create(usuario=instance)
+        else:
+            instance.perfil.save()
 
 @receiver(post_save, sender=User)
 def guardar_perfil(sender, instance, **kwargs):

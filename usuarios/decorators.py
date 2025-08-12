@@ -1,56 +1,33 @@
-from django.http import HttpResponseForbidden
-from django.shortcuts import redirect
 from functools import wraps
+from django.shortcuts import redirect, get_object_or_404
+from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from agenda.models import Evento
 
-def permiso_agenda_requerido(function):
-    @wraps(function)
-    def wrap(request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            return redirect('login')
-        
-        if request.user.is_superuser or request.user.perfil.permiso_agenda:
-            return function(request, *args, **kwargs)
-        else:
-            messages.error(request, "No tienes permiso para acceder al módulo de Agenda.")
-            return HttpResponseForbidden("No tienes permiso para acceder a esta página.")
-    return wrap
+def permiso_agenda_requerido(view_func):
+    @wraps(view_func)
+    @login_required
+    def wrapper(request, *args, **kwargs):
+        if not request.user.perfil.permiso_agenda:
+            return redirect('acceso_denegado')  # tu vista de acceso denegado
+        return view_func(request, *args, **kwargs)
+    return wrapper
 
-def permiso_firma_requerido(function):
-    @wraps(function)
-    def wrap(request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            return redirect('login')
-        
-        if request.user.is_superuser or request.user.perfil.permiso_firma:
-            return function(request, *args, **kwargs)
-        else:
-            messages.error(request, "No tienes permiso para acceder al módulo de Firma Electrónica.")
-            return HttpResponseForbidden("No tienes permiso para acceder a esta página.")
-    return wrap
+def permiso_firma_requerido(view_func):
+    @wraps(view_func)
+    @login_required
+    def wrapper(request, *args, **kwargs):
+        if not request.user.perfil.permiso_firma:
+            return redirect('acceso_denegado')
+        return view_func(request, *args, **kwargs)
+    return wrapper
 
-def admin_agenda_requerido(function):
-    @wraps(function)
-    def wrap(request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            return redirect('login')
-        
-        if request.user.is_superuser or request.user.perfil.es_admin_agenda:
-            return function(request, *args, **kwargs)
-        else:
-            messages.error(request, "Necesitas ser administrador del módulo de Agenda para acceder a esta página.")
-            return HttpResponseForbidden("No tienes permiso para acceder a esta página.")
-    return wrap
-
-def admin_firma_requerido(function):
-    @wraps(function)
-    def wrap(request, *args, **kwargs):
-        if not request.user.is_authenticated:
-            return redirect('login')
-        
-        if request.user.is_superuser or request.user.perfil.es_admin_firma:
-            return function(request, *args, **kwargs)
-        else:
-            messages.error(request, "Necesitas ser administrador del módulo de Firma Electrónica para acceder a esta página.")
-            return HttpResponseForbidden("No tienes permiso para acceder a esta página.")
-    return wrap
+def solo_creador_o_admin(view_func):
+    @wraps(view_func)
+    def _wrapped_view(request, pk, *args, **kwargs):
+        evento = get_object_or_404(Evento, pk=pk)
+        if not evento.usuario_puede_modificar(request.user):
+            messages.error(request, 'No tienes permiso para realizar esta acción.')
+            return redirect('acceso_denegado')
+        return view_func(request, pk, *args, **kwargs)
+    return _wrapped_view
