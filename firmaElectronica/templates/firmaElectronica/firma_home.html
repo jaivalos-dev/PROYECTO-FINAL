@@ -8,7 +8,7 @@
     <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 
 <body>
@@ -46,8 +46,12 @@
                 <label for="file_in">Seleccione el archivo PDF:</label>
                 <input type="file" name="file_in" id="file_in" accept=".pdf" required onchange="previewPDF(event)">
             </div>
-            <button type="submit">Firmar</button>
+            <button id="btnAbrirModal" type="button" class="btn btn-primary" disabled>
+                Firmar
+            </button>
         </form>
+
+        
 
         {% if response %}
         <div class="alert alert-success">
@@ -66,6 +70,40 @@
 
     </div>
 
+    <!-- Modal de credenciales -->
+    <div class="modal fade" id="modalCredenciales" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <form id="formCredenciales" class="modal-content">
+            {% csrf_token %}
+            <div class="modal-header">
+                <h5 class="modal-title">Credenciales de Firma</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+
+            <div class="modal-body">
+                <div class="mb-3">
+                <label class="form-label">Usuario</label>
+                <input type="text" name="sign_user" class="form-control" required minlength="3" autocomplete="username">
+                </div>
+                <div class="mb-3">
+                <label class="form-label">Contraseña</label>
+                <input type="password" name="sign_password" class="form-control" required minlength="4" autocomplete="current-password">
+                </div>
+                <div class="mb-3">
+                <label class="form-label">PIN</label>
+                <input type="password" name="sign_pin" class="form-control" required minlength="4">
+                </div>
+                <div id="alertaModal" class="alert alert-danger d-none"></div>
+            </div>
+
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button id="btnConfirmarFirma" type="submit" class="btn btn-primary">Firmar</button>
+            </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Footer -->
     <footer class="footer">
         <div>© 2024 Mi Empresa. Todos los derechos reservados.</div>
@@ -75,6 +113,7 @@
             <a href="https://wa.me/50224172700" target="_blank"><i class="fab fa-whatsapp"></i></a>
         </div>
     </footer>
+
 
     <script>
         function previewPDF(event) {
@@ -91,6 +130,105 @@
                 reader.readAsDataURL(file); 
             }
         }
+
+        (function () {
+        const btnAbrirModal = document.getElementById('btnAbrirModal');
+        const formCred = document.getElementById('formCredenciales');
+        const alerta = document.getElementById('alertaModal');
+
+        // 1) Habilitar “Firmar” cuando haya archivo seleccionado
+        // Ajusta el id si tu input se llama distinto
+        const inputPdf = document.querySelector('input[type="file"][name="file_in"]') || document.querySelector('#id_pdf');
+        if (inputPdf) {
+        inputPdf.addEventListener('change', () => {
+            const ok = inputPdf.files && inputPdf.files.length > 0 && [...inputPdf.files].every(f => f.type === 'application/pdf');
+            btnAbrirModal.disabled = !ok;
+        });
+        }
+
+        // 2) Abrir modal
+        btnAbrirModal.addEventListener('click', () => {
+        alerta.classList.add('d-none');
+        formCred.reset();
+        const m = new bootstrap.Modal(document.getElementById('modalCredenciales'));
+        m.show();
+        });
+
+        // CSRF para fetch
+        function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+        }
+        const csrftoken = getCookie('csrftoken');
+
+        // 3) Enviar archivo + credenciales al backend
+        formCred.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        alerta.classList.add('d-none');
+
+        const fd = new FormData();
+
+        // Archivo(s)
+        if (!inputPdf || !inputPdf.files.length) {
+            alerta.textContent = 'Selecciona al menos un PDF.';
+            alerta.classList.remove('d-none');
+            return;
+        }
+        // Si tu vista soporta uno, usa el primero. Si ya soporta varios, itera:
+        fd.append('file_in', inputPdf.files[0]);
+
+        // Credenciales (NO las loggees)
+        fd.append('sign_user', formCred.elements['sign_user'].value);
+        fd.append('sign_password', formCred.elements['sign_password'].value);
+        fd.append('sign_pin', formCred.elements['sign_pin'].value);
+
+        // Cualquier otro campo que tu vista ya esperaba (p.ej. reason, location…)
+        // fd.append('reason', '{{ settings.SIGNBOX_REASON }}'); // opcional si la vista lo arma sola
+
+        // Deshabilitar botón mientras firma
+        const btn = document.getElementById('btnConfirmarFirma');
+        btn.disabled = true;
+        btn.textContent = 'Firmando…';
+
+        try {
+            const resp = await fetch("{% url 'firma_home' %}", {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrftoken },
+            body: fd
+            });
+
+            if (!resp.ok) {
+            const txt = await resp.text();
+            throw new Error(txt || 'Error en la firma');
+            }
+
+            // Respuesta esperada: JSON con { ok: true, api_id, mensaje } o similar
+            const data = await resp.json().catch(() => ({}));
+            if (data.ok) {
+            // Cierra modal, limpia campos
+            bootstrap.Modal.getInstance(document.getElementById('modalCredenciales')).hide();
+            formCred.reset();
+            // Muestra feedback al usuario (puede ser un toast/cintillo en la página):
+            alert(`Documento enviado a firma. API ID: ${data.api_id || '—'}`);
+            } else {
+            throw new Error(data.error || 'No se pudo firmar. Verifica tus credenciales.');
+            }
+        } catch (err) {
+            alerta.textContent = ('' + err.message).includes('PIN') ? 'PIN incorrecto' :
+                                ('' + err.message).includes('credencial') ? 'Credenciales inválidas' :
+                                'No se pudo completar la firma. Intenta de nuevo.';
+            alerta.classList.remove('d-none');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Firmar';
+            // Limpia los campos sensibles del modal
+            formCred.elements['sign_password'].value = '';
+            formCred.elements['sign_pin'].value = '';
+        }
+        });
+    })();
+
     </script>
 
 
@@ -229,6 +367,8 @@
             opacity: 0.7;
         }
     </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 
 </html>
