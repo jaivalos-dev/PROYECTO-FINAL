@@ -12,20 +12,25 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 
 from pathlib import Path
 import os
+import environ
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
+# Inicializar entorno
+env = environ.Env()
+
+# Leer archivo .env
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-tp^&idy-yjpvk$pz$ksb5ydyb4!5q9*i@kgv=9-0u#ald#fcm('
+SECRET_KEY = env('DJANGO_SECRET_KEY')
+DEBUG = env.bool('DEBUG', default=False)
+ALLOWED_HOSTS = env.list('ALLOWED_HOSTS', default=['localhost'])
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-ALLOWED_HOSTS = ['*'] 
 
 # Application definition
 
@@ -141,8 +146,8 @@ EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
-EMAIL_HOST_USER = 'jaivalos.dev@gmail.com' 
-EMAIL_HOST_PASSWORD = 'ixdv vsuv nqkt twvu'  
+EMAIL_HOST_USER = env('EMAIL_HOST_USER')
+EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 
 # LOGGING = {
@@ -157,3 +162,20 @@ DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 #         'level': 'DEBUG',
 #     },
 # }
+
+
+# Configuración de SignBox
+SIGNBOX_BASE_URL = env('SIGNBOX_BASE_URL')
+SIGNBOX_SIGN_ENDPOINT = env('SIGNBOX_SIGN_ENDPOINT')
+SIGNBOX_ENV = env('SIGNBOX_ENV')
+SIGNBOX_FORMAT = env('SIGNBOX_FORMAT')
+SIGNBOX_LEVEL = env('SIGNBOX_LEVEL')
+SIGNBOX_IMG_BOOKMARK = env('SIGNBOX_IMG_BOOKMARK')
+SIGNBOX_IMG_NAME = env('SIGNBOX_IMG_NAME')
+SIGNBOX_POSITION = env('SIGNBOX_POSITION')
+SIGNBOX_NPAGE = env('SIGNBOX_NPAGE')
+SIGNBOX_REASON = env('SIGNBOX_REASON')
+SIGNBOX_LOCATION = env('SIGNBOX_LOCATION')
+
+SIGNBOX_BILLING_USERNAME = env('SIGNBOX_BILLING_USERNAME')
+SIGNBOX_BILLING_PASSWORD = env('SIGNBOX_BILLING_PASSWORD')

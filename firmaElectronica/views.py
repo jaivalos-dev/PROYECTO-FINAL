@@ -5,6 +5,7 @@ import requests
 from requests.exceptions import Timeout
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 from usuarios.decorators import permiso_firma_requerido
+from django.conf import settings
 
 @permiso_firma_requerido
 def firma_home(request):
@@ -19,22 +20,22 @@ def firma_home(request):
         # Crear el multipart form data
         multipart_data = MultipartEncoder(
             fields={
-                'env': 'sandbox',
-                'format': 'pades',
-                'username': '1087998',
-                'password': 'Kqp#3Hn6',
-                'pin': 'abc123**',
-                'level': 'BES',
-                'billing_username': 'ccg@ccg',
-                'billing_password': 't2G9T71O',
+                'env': settings.SIGNBOX_ENV,
+                'format': settings.SIGNBOX_FORMAT,
+                'username': '',
+                'password': '',
+                'pin': '',
+                'level': settings.SIGNBOX_LEVEL,
+                'billing_username': settings.SIGNBOX_BILLING_USERNAME,
+                'billing_password': settings.SIGNBOX_BILLING_PASSWORD,
                 'identifier': 'DS0',
-                'img_bookmark': 'uanataca',
-                'img_name': 'uanataca.argb',
-                'paragraph_format': '[{ "font" : ["Universal",10]," align ":" right","format ":[" Firmado digitalmente por: $(CN)s","O=$(O)s","C=$(C)s","S=$(S)s"]}]',
-                'position': '300,100,500,150',
-                'npage': '0',
-                'reason': 'Pruebilla',
-                'location': 'Guatemala',
+                'img_bookmark': settings.SIGNBOX_IMG_BOOKMARK,
+                'img_name': settings.SIGNBOX_IMG_NAME,
+                'paragraph_format': '[{"font":["Universal",10],"align":"right","format":[" Firmado digitalmente por: $(CN)s","O=$(O)s","C=$(C)s","S=$(S)s"]}]',
+                'position': settings.SIGNBOX_POSITION,
+                'npage': str(settings.SIGNBOX_NPAGE),
+                'reason': settings.SIGNBOX_REASON,
+                'location': settings.SIGNBOX_LOCATION,
                 'file_in': (file_in.name, file_content, 'application/pdf')
             }
         )
@@ -45,12 +46,8 @@ def firma_home(request):
 
         try:
             # Usar requests.request() como en Postman
-            response = requests.post(
-                "http://192.168.0.27/api/sign",
-                headers=headers,
-                data=multipart_data,
-                timeout=10
-            )
+            endpoint = f"{settings.SIGNBOX_BASE_URL}{settings.SIGNBOX_SIGN_ENDPOINT}"
+            response = requests.post(endpoint, headers=headers, data=multipart_data, timeout=10)
 
             print("Respuesta del api: ", response.text)
 
