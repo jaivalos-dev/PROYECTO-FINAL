@@ -61,11 +61,27 @@ def firma_home(request):
                     new_file = InMemoryUploadedFile(
                         file_io, 'file_in', f.name, 'application/pdf', len(file_content), None
                     )
-                    firma = FirmaElectronica(archivo=new_file, api_id=api_id, usuario=request.user)
+                    firma = FirmaElectronica(
+                        archivo=new_file,
+                        nombre_original=f.name,  # nuevo
+                        api_id=api_id,
+                        usuario=request.user,
+                        estado=FirmaElectronica.Estados.EN_PROCESO,  # nuevo
+                        error_msg=''  # nuevo
+                    )
                     firma.save()
 
                     results.append({'filename': f.name, 'api_id': api_id, 'status': 'ok'})
                 else:
+
+                    FirmaElectronica.objects.create(
+                        archivo=new_file,  # o f directamente
+                        nombre_original=f.name,
+                        usuario=request.user,
+                        estado=FirmaElectronica.Estados.ERROR,
+                        error_msg=f'API {resp.status_code}: {resp.text[:200]}'
+                    )
+
                     results.append({
                         'filename': f.name,
                         'api_id': None,

@@ -111,6 +111,24 @@
         </div>
     </div>
 
+    <!-- Modal Resultado -->
+    <div class="modal fade" id="modalResultado" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title">Resultado de la firma</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+            <ul id="resultadoLista" class="list-group"></ul>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Aceptar</button>
+        </div>
+        </div>
+    </div>
+    </div>
+
     <!-- Footer -->
     <footer class="footer">
         <div>© 2024 Mi Empresa. Todos los derechos reservados.</div>
@@ -304,7 +322,41 @@
                 : `❌ ${r.filename} → ${r.error || 'Error'}`
             ).join('\n');
 
-            alert(`Resultado de envío:\n\n${lines}`);
+            // Cerrar modal de credenciales
+            bootstrap.Modal.getInstance(document.getElementById('modalCredenciales')).hide();
+
+            // Limpiar campos de credenciales
+            formCred.reset();
+
+            // Llenar lista en el modal de resultados
+            const lista = document.getElementById('resultadoLista');
+            lista.innerHTML = '';
+            (data.results || []).forEach(r => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item d-flex justify-content-between align-items-start';
+            li.innerHTML = `
+                <div class="ms-2 me-auto">
+                <div class="fw-bold">${r.filename}</div>
+                ${r.status === 'ok'
+                    ? `API ID: <code>${r.api_id}</code>`
+                    : `<span class="text-danger">${r.error || 'Error'}</span>`}
+                </div>
+                <span class="badge ${r.status === 'ok' ? 'bg-primary' : 'bg-danger'} rounded-pill">
+                ${r.status === 'ok' ? 'Enviado' : 'ERR'}
+                </span>
+            `;
+            lista.appendChild(li);
+            });
+
+            // Mostrar modal de resultados
+            new bootstrap.Modal(document.getElementById('modalResultado')).show();
+
+            // Limpiar archivos y preview
+            document.getElementById('file_in').value = '';
+            document.getElementById('fileList').innerHTML = '';
+            document.getElementById('pdfEmbed').style.display = 'none';
+            document.getElementById('previewDropdownWrap').classList.add('d-none');
+            document.getElementById('btnAbrirModal').disabled = true;
             } else {
             const firstErr = (data.results || []).find(r => r.status === 'error');
             throw new Error(firstErr?.error || data.error || 'No se pudo firmar.');
