@@ -10,100 +10,78 @@ from django.conf import settings
 @permiso_firma_requerido
 def firma_home(request):
     if request.method == 'POST':
-        file_in = request.FILES['file_in']
-        print("1. Archivo recibido:", file_in.name)  # Log 1
-
-        # Guardar una copia del contenido del archivo
-        file_content = file_in.read()
-        print("2. Contenido del archivo leído")  # Log 2
-        
-        # Leer credenciales del modal (sin loggear)
+        # Credenciales del modal (no loggear)
         sign_user = request.POST.get('sign_user', '').strip()
         sign_password = request.POST.get('sign_password', '').strip()
-        sign_pin = request.POST.get('sign_pin', '').strip()        
+        sign_pin = request.POST.get('sign_pin', '').strip()
 
-        # Crear el multipart form data
-        multipart_data = MultipartEncoder(
-            fields={
-                'env': settings.SIGNBOX_ENV,
-                'format': settings.SIGNBOX_FORMAT,
-                'username': sign_user,
-                'password': sign_password,
-                'pin': sign_pin,
-                'level': settings.SIGNBOX_LEVEL,
-                'billing_username': settings.SIGNBOX_BILLING_USERNAME,
-                'billing_password': settings.SIGNBOX_BILLING_PASSWORD,
-                'identifier': 'DS0',
-                'img_bookmark': settings.SIGNBOX_IMG_BOOKMARK,
-                'img_name': settings.SIGNBOX_IMG_NAME,
-                'paragraph_format': '[{"font":["Universal",10],"align":"right","format":[" Firmado digitalmente por: $(CN)s","O=$(O)s","C=$(C)s","S=$(S)s"]}]',
-                'position': settings.SIGNBOX_POSITION,
-                'npage': str(settings.SIGNBOX_NPAGE),
-                'reason': settings.SIGNBOX_REASON,
-                'location': settings.SIGNBOX_LOCATION,
-                'file_in': (file_in.name, file_content, 'application/pdf')
-            }
-        )
+        files = request.FILES.getlist('file_in')
+        if not files:
+            return JsonResponse({'ok': False, 'error': 'No se recibieron archivos.'}, status=400)
 
-        headers = {
-            'Content-Type': multipart_data.content_type
-        }
+        results = []
+        for f in files:
+            try:
+                file_content = f.read()  # leer en memoria una vez
 
-        try:
-            endpoint = f"{settings.SIGNBOX_BASE_URL}{settings.SIGNBOX_SIGN_ENDPOINT}"
-            response = requests.post(endpoint, headers=headers, data=multipart_data, timeout=10)
-
-            print("Respuesta del api: ", response.text)
-
-            if response.status_code == 200:
-                api_id = response.text.split('=')[1].strip()
-                print("3. API ID recibido:", api_id)  # Log 3
-
-                from django.core.files.uploadedfile import InMemoryUploadedFile
-                import io
-                file_io = io.BytesIO(file_content)
-                new_file = InMemoryUploadedFile(
-                    file_io,
-                    'file_in',
-                    file_in.name,
-                    'application/pdf',
-                    len(file_content),
-                    None
+                multipart_data = MultipartEncoder(
+                    fields={
+                        'env': settings.SIGNBOX_ENV,
+                        'format': settings.SIGNBOX_FORMAT,
+                        'username': sign_user,
+                        'password': sign_password,
+                        'pin': sign_pin,
+                        'level': settings.SIGNBOX_LEVEL,
+                        'billing_username': settings.SIGNBOX_BILLING_USERNAME,
+                        'billing_password': settings.SIGNBOX_BILLING_PASSWORD,
+                        'identifier': 'DS0',
+                        'img_bookmark': settings.SIGNBOX_IMG_BOOKMARK,
+                        'img_name': settings.SIGNBOX_IMG_NAME,
+                        'paragraph_format': '[{"font":["Universal",10],"align":"right","format":[" Firmado digitalmente por: $(CN)s","O=$(O)s","C=$(C)s","S=$(S)s"]}]',
+                        'position': settings.SIGNBOX_POSITION,
+                        'npage': str(settings.SIGNBOX_NPAGE),
+                        'reason': settings.SIGNBOX_REASON,
+                        'location': settings.SIGNBOX_LOCATION,
+                        'file_in': (f.name, file_content, 'application/pdf')
+                    }
                 )
+                headers = {'Content-Type': multipart_data.content_type}
+                endpoint = f"{settings.SIGNBOX_BASE_URL}{settings.SIGNBOX_SIGN_ENDPOINT}"
 
-                print("4. Nuevo archivo creado en memoria")  # Log 4
+                resp = requests.post(endpoint, headers=headers, data=multipart_data, timeout=10)
+                print(f"[API] {f.name}: {resp.status_code} -> {resp.text}")
 
-                try:
-                    firma = FirmaElectronica(
-                        archivo=new_file,
-                        api_id=api_id,
-                        usuario=request.user
+                if resp.status_code == 200 and 'id=' in resp.text:
+                    api_id = resp.text.split('=')[1].strip()
+
+                    # Guardar archivo original y registro
+                    from django.core.files.uploadedfile import InMemoryUploadedFile
+                    import io
+                    file_io = io.BytesIO(file_content)
+                    new_file = InMemoryUploadedFile(
+                        file_io, 'file_in', f.name, 'application/pdf', len(file_content), None
                     )
-                    print("5. Objeto FirmaElectronica creado")  # Log 5
+                    firma = FirmaElectronica(archivo=new_file, api_id=api_id, usuario=request.user)
                     firma.save()
-                    print("6. Objeto guardado en la base de datos")  # Log 6
-                    saved_firma = FirmaElectronica.objects.get(api_id=api_id)
-                    print("7. Objeto verificado en la base de datos:", saved_firma)  # Log 7
 
-                except Exception as db_error:
-                    return JsonResponse({
-                        'ok': False,
-                        'error': f'Error al guardar en la base de datos: {str(db_error)}'
+                    results.append({'filename': f.name, 'api_id': api_id, 'status': 'ok'})
+                else:
+                    results.append({
+                        'filename': f.name,
+                        'api_id': None,
+                        'status': 'error',
+                        'error': f'API {resp.status_code}: {resp.text[:200]}'
                     })
 
-                return JsonResponse({'ok': True, 'api_id': api_id})
+            except Timeout:
+                results.append({'filename': f.name, 'api_id': None, 'status': 'error', 'error': 'Tiempo de espera excedido'})
+            except requests.RequestException as e:
+                results.append({'filename': f.name, 'api_id': None, 'status': 'error', 'error': f'Error de red: {str(e)}'})
+            except Exception as e:
+                results.append({'filename': f.name, 'api_id': None, 'status': 'error', 'error': f'Error inesperado: {str(e)}'})
 
-            else:
-                return JsonResponse({
-                    'ok': False,
-                    'error': f'Error en la API ({response.status_code}): {response.text}'
-                })
-
-        except Timeout:
-            return JsonResponse({'ok': False, 'error': 'Tiempo de espera excedido'})
-        except requests.RequestException as e:
-            return JsonResponse({'ok': False, 'error': f'Error en la solicitud: {str(e)}'})
-        except Exception as e:
-            return JsonResponse({'ok': False, 'error': f'Error inesperado: {str(e)}'})
+        # ok=True si al menos uno salió bien
+        any_ok = any(r.get('status') == 'ok' for r in results)
+        return JsonResponse({'ok': any_ok, 'results': results})
 
     return render(request, 'firmaElectronica/firma_home.html')

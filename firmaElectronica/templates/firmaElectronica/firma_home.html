@@ -39,20 +39,20 @@
 
     <!-- Contenido -->
     <div class="container">
-        <h1>Firma Electrónica</h1>
+        <h1 class="text-center mb-4">Firma Electrónica</h1>
         <form method="POST" enctype="multipart/form-data">
             {% csrf_token %}
             <div class="form-group">
                 <label for="file_in">Seleccione el archivo PDF:</label>
-                <input type="file" name="file_in" id="file_in" accept=".pdf" required onchange="previewPDF(event)">
+                <input type="file" name="file_in" id="file_in" accept=".pdf" multiple required onchange="previewPDF(event)">
             </div>
-            <button id="btnAbrirModal" type="button" class="btn btn-primary" disabled>
+            <ul id="fileList" class="list-unstyled small text-muted mt-2"></ul>
+            <button id="btnAbrirModal" type="button" class="btn btn-primary btn-lg w-100" disabled>
                 Firmar
             </button>
         </form>
 
-        
-
+    
         {% if response %}
         <div class="alert alert-success">
             {{ response }} - ID de firma: {{ api_id }}
@@ -65,6 +65,13 @@
 
         <div id="pdfPreview" style="margin-top: 20px;">
             <h2>Vista Previa del PDF</h2>
+            <!-- Dropdown de selección de documento -->
+            <div class="dropdown mb-2 d-none" id="previewDropdownWrap">
+            <button id="previewBtn" class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                Selecciona un archivo
+            </button>
+                <ul id="previewMenu" class="dropdown-menu"></ul>
+            </div>
             <embed id="pdfEmbed" src="" type="application/pdf" width="100%" height="500" style="display: none;"></embed>
         </div>
 
@@ -116,20 +123,99 @@
 
 
     <script>
-        function previewPDF(event) {
-            const file = event.target.files[0]; 
-            const reader = new FileReader();
 
-            reader.onload = function (e) {
-                const embed = document.getElementById('pdfEmbed');
-                embed.src = e.target.result; 
-                embed.style.display = 'block'; 
-            };
+        function isPdf(file){ return file.type==='application/pdf' || /\.pdf$/i.test(file.name); }
 
-            if (file) {
-                reader.readAsDataURL(file); 
-            }
+        function loadPreviewFile(file){
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const embed = document.getElementById('pdfEmbed');
+            embed.src = e.target.result;
+            embed.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
         }
+
+        // Truncar nombres largos para mostrar en el botón y el menú
+        function ellipsize(name, max = 70) {
+        if (name.length <= max) return name;
+        const head = name.slice(0, Math.floor(max * 0.6));
+        const tail = name.slice(-Math.floor(max * 0.3));
+        return head + '…' + tail;
+        }
+
+        // Poner el label del botón
+        function setPreviewLabel(name){
+        document.getElementById('previewBtn').textContent = ellipsize(name, 60);
+        document.getElementById('previewBtn').title = name;
+        }
+
+        // Llenar el menú del dropdown
+        function fillPreviewMenu(files){
+        const menu = document.getElementById('previewMenu');
+        menu.innerHTML = '';
+        files.forEach((f, idx) => {
+            const li = document.createElement('li');
+            const a = document.createElement('a');
+            a.className = 'dropdown-item';
+            a.textContent = ellipsize(f.name, 80);
+            a.title = f.name;
+            a.href = '#';
+            a.addEventListener('click', (e) => {
+            e.preventDefault();
+            setPreviewLabel(f.name);
+            loadPreviewFile(files[idx]);
+            });
+            li.appendChild(a);
+            menu.appendChild(li);
+        });
+        }
+
+        // Handler del input de archivos
+        function previewPDF(event){
+        const files = [...(event.target.files || [])];
+        const list = document.getElementById('fileList');
+        const ddWrap = document.getElementById('previewDropdownWrap');
+        list.innerHTML = '';
+
+        // No hay archivos
+        if(!files.length){
+            ddWrap.classList.add('d-none');
+            document.getElementById('pdfEmbed').style.display = 'none';
+            document.getElementById('btnAbrirModal').disabled = true;
+            return;
+        }
+
+        // Validar que todos sean PDF
+        const allPdf = files.every(isPdf);
+        document.getElementById('btnAbrirModal').disabled = !allPdf;
+
+        // Poblar la lista de nombres (arriba del botón)
+        files.forEach(f => {
+            const li = document.createElement('li');
+            li.textContent = f.name;
+            li.title = f.name;
+            li.classList.add('ellipsis');
+            list.appendChild(li);
+        });
+
+        // Mostrar dropdown si hay más de 1 archivo
+        if(files.length > 1){
+            ddWrap.classList.remove('d-none');
+        }else{
+            ddWrap.classList.add('d-none');
+        }
+
+        // Llenar menú y setear preview inicial
+        fillPreviewMenu(files);
+        setPreviewLabel(files[0].name);
+        loadPreviewFile(files[0]);
+
+        // Guarda los archivos en una variable global por si luego quieres usarlos
+        window.__selectedPdfFiles = files;
+        }
+
 
         (function () {
         const btnAbrirModal = document.getElementById('btnAbrirModal');
@@ -137,28 +223,28 @@
         const alerta = document.getElementById('alertaModal');
 
         // 1) Habilitar “Firmar” cuando haya archivo seleccionado
-        // Ajusta el id si tu input se llama distinto
-        const inputPdf = document.querySelector('input[type="file"][name="file_in"]') || document.querySelector('#id_pdf');
+        const inputPdf = document.querySelector('#file_in');
         if (inputPdf) {
         inputPdf.addEventListener('change', () => {
-            const ok = inputPdf.files && inputPdf.files.length > 0 && [...inputPdf.files].every(f => f.type === 'application/pdf');
+            const files = inputPdf.files || [];
+            const ok = files.length > 0 && [...files].every(isPdf);
             btnAbrirModal.disabled = !ok;
         });
         }
 
         // 2) Abrir modal
         btnAbrirModal.addEventListener('click', () => {
-        alerta.classList.add('d-none');
-        formCred.reset();
-        const m = new bootstrap.Modal(document.getElementById('modalCredenciales'));
-        m.show();
+            alerta.classList.add('d-none');
+            formCred.reset();
+            const m = new bootstrap.Modal(document.getElementById('modalCredenciales'));
+            m.show();
         });
 
         // CSRF para fetch
         function getCookie(name) {
-        const value = `; ${document.cookie}`;
-        const parts = value.split(`; ${name}=`);
-        if (parts.length === 2) return parts.pop().split(';').shift();
+            const value = `; ${document.cookie}`;
+            const parts = value.split(`; ${name}=`);
+            if (parts.length === 2) return parts.pop().split(';').shift();
         }
         const csrftoken = getCookie('csrftoken');
 
@@ -176,7 +262,9 @@
             return;
         }
         // Si tu vista soporta uno, usa el primero. Si ya soporta varios, itera:
-        fd.append('file_in', inputPdf.files[0]);
+        for (const f of inputPdf.files) {
+            fd.append('file_in', f);
+        }
 
         // Credenciales (NO las loggees)
         fd.append('sign_user', formCred.elements['sign_user'].value);
@@ -206,13 +294,20 @@
             // Respuesta esperada: JSON con { ok: true, api_id, mensaje } o similar
             const data = await resp.json().catch(() => ({}));
             if (data.ok) {
-            // Cierra modal, limpia campos
             bootstrap.Modal.getInstance(document.getElementById('modalCredenciales')).hide();
             formCred.reset();
-            // Muestra feedback al usuario (puede ser un toast/cintillo en la página):
-            alert(`Documento enviado a firma. API ID: ${data.api_id || '—'}`);
+
+            // Render rápido: resumen en alert
+            const lines = (data.results || []).map(r =>
+                r.status === 'ok'
+                ? `✅ ${r.filename} → API ID: ${r.api_id}`
+                : `❌ ${r.filename} → ${r.error || 'Error'}`
+            ).join('\n');
+
+            alert(`Resultado de envío:\n\n${lines}`);
             } else {
-            throw new Error(data.error || 'No se pudo firmar. Verifica tus credenciales.');
+            const firstErr = (data.results || []).find(r => r.status === 'error');
+            throw new Error(firstErr?.error || data.error || 'No se pudo firmar.');
             }
         } catch (err) {
             alerta.textContent = ('' + err.message).includes('PIN') ? 'PIN incorrecto' :
@@ -231,14 +326,26 @@
 
     </script>
 
-
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: 'Inter', sans-serif;
+        *{box-sizing:border-box;font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+        body{background:#f5f6f8;margin:0}
+        .container{
+            max-width: 1000px; margin: 24px auto; padding: 24px;
+            background:#fff; border-radius:16px; box-shadow:0 6px 20px rgba(0,0,0,.06);
+            min-height: calc(100vh - 162px);
         }
+        h1{font-weight:700; letter-spacing:.2px}
+        label{font-weight:600; margin-bottom:.25rem}
+        input[type="file"]{padding:.65rem; border:1px solid #dfe3ea; border-radius:.5rem}
+        #fileList li{padding:.25rem 0}
+        #pdfEmbed{border:1px solid #e9ecef; border-radius:.5rem}
+        /* Navbar/Footer básicos (si los usas) */
+        .navbar, .footer{background:#2d2f33; color:#fff}
+        .navbar a, .footer a{color:#fff; text-decoration:none}
+        .navbar a:hover, .footer a:hover{opacity:.85}
+        /* Modal: botones consistentes */
+        .modal-footer .btn-primary{min-width:120px}
+        #fileList{max-height: 120px; overflow:auto}
 
         /* Navbar */
         .navbar {
@@ -250,8 +357,7 @@
             color: white;
         }
 
-        .navbar .left,
-        .navbar .right {
+        .navbar .left, .navbar .right {
             display: flex;
             gap: 15px;
         }
@@ -271,102 +377,27 @@
             font-weight: bold;
         }
 
-        /* Estilos básicos para el formulario */
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            /* padding: 20px; */
-            background-color: #f9f9f9;
+        #fileList { max-height: 120px; overflow: auto; }
+        #fileList li.ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        /* Opcional: margen al preview para que el dropdown no lo tape visualmente */
+        #pdfEmbed { margin-top: .25rem; }
+
+        #previewSelector {
+            max-width: 100%;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
-        .container {
-            max-width: 75%;
-            margin: 0 auto;
-            padding: 20px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            flex: 1; /* Esto hace que el contenedor ocupe todo el espacio disponible */
-            min-height: calc(100vh - 109px); /* Altura total - (altura navbar + altura footer) */
+        #previewSelector option {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
-        h1 {
-            text-align: center;
-        }
 
-        .form-group {
-            margin-bottom: 15px;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 5px;
-        }
-
-        input[type="file"] {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
-
-        button {
-            width: 100%;
-            padding: 10px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-        }
-
-        button:hover {
-            background-color: #45a049;
-        }
-
-        .alert {
-            margin-top: 20px;
-            padding: 10px;
-            border-radius: 4px;
-        }
-
-        .alert-success {
-            background-color: #d4edda;
-            color: #155724;
-        }
-
-        .alert-danger {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-
-        /* Footer */
-        .footer {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 20px;
-            background-color: #333;
-            color: white;
-            margin-top: auto;
-            /* Asegura que el footer esté al final */
-        }
-
-        .footer .socials {
-            display: flex;
-            gap: 10px;
-        }
-
-        .footer a {
-            color: white;
-            text-decoration: none;
-            font-size: 1.2em;
-        }
-
-        .footer a:hover {
-            opacity: 0.7;
-        }
     </style>
+
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 </body>
