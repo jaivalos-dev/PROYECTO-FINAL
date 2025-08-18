@@ -140,243 +140,265 @@
     </footer>
 
 
-    <script>
+<script>
+    /* ========= PREVIEW / UI UTILITIES (igual que tenías) ========= */
+    function isPdf(file){ return file.type==='application/pdf' || /\.pdf$/i.test(file.name); }
 
-        function isPdf(file){ return file.type==='application/pdf' || /\.pdf$/i.test(file.name); }
+    function loadPreviewFile(file){
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const embed = document.getElementById('pdfEmbed');
+        embed.src = e.target.result;
+        embed.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+    }
 
-        function loadPreviewFile(file){
-        if(!file) return;
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const embed = document.getElementById('pdfEmbed');
-            embed.src = e.target.result;
-            embed.style.display = 'block';
-        };
-        reader.readAsDataURL(file);
-        }
+    function ellipsize(name, max = 70) {
+    if (name.length <= max) return name;
+    const head = name.slice(0, Math.floor(max * 0.6));
+    const tail = name.slice(-Math.floor(max * 0.3));
+    return head + '…' + tail;
+    }
 
-        // Truncar nombres largos para mostrar en el botón y el menú
-        function ellipsize(name, max = 70) {
-        if (name.length <= max) return name;
-        const head = name.slice(0, Math.floor(max * 0.6));
-        const tail = name.slice(-Math.floor(max * 0.3));
-        return head + '…' + tail;
-        }
+    function setPreviewLabel(name){
+    document.getElementById('previewBtn').textContent = ellipsize(name, 60);
+    document.getElementById('previewBtn').title = name;
+    }
 
-        // Poner el label del botón
-        function setPreviewLabel(name){
-        document.getElementById('previewBtn').textContent = ellipsize(name, 60);
-        document.getElementById('previewBtn').title = name;
-        }
-
-        // Llenar el menú del dropdown
-        function fillPreviewMenu(files){
-        const menu = document.getElementById('previewMenu');
-        menu.innerHTML = '';
-        files.forEach((f, idx) => {
-            const li = document.createElement('li');
-            const a = document.createElement('a');
-            a.className = 'dropdown-item';
-            a.textContent = ellipsize(f.name, 80);
-            a.title = f.name;
-            a.href = '#';
-            a.addEventListener('click', (e) => {
-            e.preventDefault();
-            setPreviewLabel(f.name);
-            loadPreviewFile(files[idx]);
-            });
-            li.appendChild(a);
-            menu.appendChild(li);
+    function fillPreviewMenu(files){
+    const menu = document.getElementById('previewMenu');
+    menu.innerHTML = '';
+    files.forEach((f, idx) => {
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.className = 'dropdown-item';
+        a.textContent = ellipsize(f.name, 80);
+        a.title = f.name;
+        a.href = '#';
+        a.addEventListener('click', (e) => {
+        e.preventDefault();
+        setPreviewLabel(f.name);
+        loadPreviewFile(files[idx]);
         });
-        }
+        li.appendChild(a);
+        menu.appendChild(li);
+    });
+    }
 
-        // Handler del input de archivos
-        function previewPDF(event){
-        const files = [...(event.target.files || [])];
-        const list = document.getElementById('fileList');
-        const ddWrap = document.getElementById('previewDropdownWrap');
-        list.innerHTML = '';
+    function previewPDF(event){
+    const files = [...(event.target.files || [])];
+    const list = document.getElementById('fileList');
+    const ddWrap = document.getElementById('previewDropdownWrap');
+    list.innerHTML = '';
 
-        // No hay archivos
-        if(!files.length){
-            ddWrap.classList.add('d-none');
-            document.getElementById('pdfEmbed').style.display = 'none';
-            document.getElementById('btnAbrirModal').disabled = true;
+    if(!files.length){
+        ddWrap.classList.add('d-none');
+        document.getElementById('pdfEmbed').style.display = 'none';
+        document.getElementById('btnAbrirModal').disabled = true;
+        return;
+    }
+
+    const allPdf = files.every(isPdf);
+    document.getElementById('btnAbrirModal').disabled = !allPdf;
+
+    files.forEach(f => {
+        const li = document.createElement('li');
+        li.textContent = f.name;
+        li.title = f.name;
+        li.classList.add('ellipsis');
+        list.appendChild(li);
+    });
+
+    if(files.length > 1){ ddWrap.classList.remove('d-none'); }
+    else{ ddWrap.classList.add('d-none'); }
+
+    fillPreviewMenu(files);
+    setPreviewLabel(files[0].name);
+    loadPreviewFile(files[0]);
+
+    window.__selectedPdfFiles = files;
+    }
+
+    /* ========= POLLING (modo pull) ========= */
+    const SIGN_STATUS_URL = "{% url 'sign_status' %}"; // endpoint Django
+
+    function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    }
+    const csrftoken = getCookie('csrftoken');
+
+    function startPolling(ref, $badge, $statusContainer){
+    // Actualiza UI cada 3s hasta que el backend diga ready=true
+    const interval = setInterval(async () => {
+        try {
+        const res = await fetch(`${SIGN_STATUS_URL}?ref=${encodeURIComponent(ref)}`, { headers: {'X-CSRFToken': csrftoken }});
+        const data = await res.json();
+
+        if (data.ready) {
+            // Firmado listo
+            clearInterval(interval);
+            $badge.className = 'badge bg-success rounded-pill';
+            $badge.textContent = 'Firmado';
+            $statusContainer.innerHTML = '';
+            const a = document.createElement('a');
+            a.href = data.url;
+            a.target = '_blank';
+            a.textContent = 'Descargar PDF firmado';
+            $statusContainer.appendChild(a);
             return;
         }
 
-        // Validar que todos sean PDF
-        const allPdf = files.every(isPdf);
-        document.getElementById('btnAbrirModal').disabled = !allPdf;
-
-        // Poblar la lista de nombres (arriba del botón)
-        files.forEach(f => {
-            const li = document.createElement('li');
-            li.textContent = f.name;
-            li.title = f.name;
-            li.classList.add('ellipsis');
-            list.appendChild(li);
-        });
-
-        // Mostrar dropdown si hay más de 1 archivo
-        if(files.length > 1){
-            ddWrap.classList.remove('d-none');
-        }else{
-            ddWrap.classList.add('d-none');
+        // Estados intermedios
+        if (data.state === 'failed' || data.state === 'error') {
+            clearInterval(interval);
+            $badge.className = 'badge bg-danger rounded-pill';
+            $badge.textContent = 'Error';
+            $statusContainer.textContent = data.error || 'Error en firma';
+            return;
         }
 
-        // Llenar menú y setear preview inicial
-        fillPreviewMenu(files);
-        setPreviewLabel(files[0].name);
-        loadPreviewFile(files[0]);
+        // Sigue procesando
+        $badge.className = 'badge bg-primary rounded-pill';
+        $badge.textContent = 'Procesando';
+        $statusContainer.textContent = data.state || 'Procesando…';
 
-        // Guarda los archivos en una variable global por si luego quieres usarlos
-        window.__selectedPdfFiles = files;
+        } catch (e) {
+        // No detenemos el polling por fallos transitorios
+        $statusContainer.textContent = 'Reintentando…';
         }
+    }, 3000);
+    }
 
+    /* ========= FLUJO PRINCIPAL ========= */
+    (function () {
+    const btnAbrirModal = document.getElementById('btnAbrirModal');
+    const formCred = document.getElementById('formCredenciales');
+    const alerta = document.getElementById('alertaModal');
 
-        (function () {
-        const btnAbrirModal = document.getElementById('btnAbrirModal');
-        const formCred = document.getElementById('formCredenciales');
-        const alerta = document.getElementById('alertaModal');
-
-        // 1) Habilitar “Firmar” cuando haya archivo seleccionado
-        const inputPdf = document.querySelector('#file_in');
-        if (inputPdf) {
+    const inputPdf = document.querySelector('#file_in');
+    if (inputPdf) {
         inputPdf.addEventListener('change', () => {
-            const files = inputPdf.files || [];
-            const ok = files.length > 0 && [...files].every(isPdf);
-            btnAbrirModal.disabled = !ok;
+        const files = inputPdf.files || [];
+        const ok = files.length > 0 && [...files].every(isPdf);
+        btnAbrirModal.disabled = !ok;
         });
-        }
+    }
 
-        // 2) Abrir modal
-        btnAbrirModal.addEventListener('click', () => {
-            alerta.classList.add('d-none');
-            formCred.reset();
-            const m = new bootstrap.Modal(document.getElementById('modalCredenciales'));
-            m.show();
-        });
+    btnAbrirModal.addEventListener('click', () => {
+        alerta.classList.add('d-none');
+        formCred.reset();
+        const m = new bootstrap.Modal(document.getElementById('modalCredenciales'));
+        m.show();
+    });
 
-        // CSRF para fetch
-        function getCookie(name) {
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop().split(';').shift();
-        }
-        const csrftoken = getCookie('csrftoken');
-
-        // 3) Enviar archivo + credenciales al backend
-        formCred.addEventListener('submit', async (e) => {
+    // Enviar archivo + credenciales
+    formCred.addEventListener('submit', async (e) => {
         e.preventDefault();
         alerta.classList.add('d-none');
 
         const fd = new FormData();
-
-        // Archivo(s)
         if (!inputPdf || !inputPdf.files.length) {
-            alerta.textContent = 'Selecciona al menos un PDF.';
-            alerta.classList.remove('d-none');
-            return;
+        alerta.textContent = 'Selecciona al menos un PDF.';
+        alerta.classList.remove('d-none');
+        return;
         }
-        // Si tu vista soporta uno, usa el primero. Si ya soporta varios, itera:
-        for (const f of inputPdf.files) {
-            fd.append('file_in', f);
-        }
-
-        // Credenciales (NO las loggees)
+        for (const f of inputPdf.files) { fd.append('file_in', f); }
         fd.append('sign_user', formCred.elements['sign_user'].value);
         fd.append('sign_password', formCred.elements['sign_password'].value);
         fd.append('sign_pin', formCred.elements['sign_pin'].value);
 
-        // Cualquier otro campo que tu vista ya esperaba (p.ej. reason, location…)
-        // fd.append('reason', '{{ settings.SIGNBOX_REASON }}'); // opcional si la vista lo arma sola
-
-        // Deshabilitar botón mientras firma
         const btn = document.getElementById('btnConfirmarFirma');
-        btn.disabled = true;
-        btn.textContent = 'Firmando…';
+        btn.disabled = true; btn.textContent = 'Firmando…';
 
         try {
-            const resp = await fetch("{% url 'firma_home' %}", {
+        const resp = await fetch("{% url 'firma_home' %}", {
             method: 'POST',
             headers: { 'X-CSRFToken': csrftoken },
             body: fd
-            });
+        });
 
-            if (!resp.ok) {
+        if (!resp.ok) {
             const txt = await resp.text();
             throw new Error(txt || 'Error en la firma');
-            }
+        }
 
-            // Respuesta esperada: JSON con { ok: true, api_id, mensaje } o similar
-            const data = await resp.json().catch(() => ({}));
-            if (data.ok) {
-            bootstrap.Modal.getInstance(document.getElementById('modalCredenciales')).hide();
-            formCred.reset();
-
-            // Render rápido: resumen en alert
-            const lines = (data.results || []).map(r =>
-                r.status === 'ok'
-                ? `✅ ${r.filename} → API ID: ${r.api_id}`
-                : `❌ ${r.filename} → ${r.error || 'Error'}`
-            ).join('\n');
-
-            // Cerrar modal de credenciales
-            bootstrap.Modal.getInstance(document.getElementById('modalCredenciales')).hide();
-
-            // Limpiar campos de credenciales
-            formCred.reset();
-
-            // Llenar lista en el modal de resultados
-            const lista = document.getElementById('resultadoLista');
-            lista.innerHTML = '';
-            (data.results || []).forEach(r => {
-            const li = document.createElement('li');
-            li.className = 'list-group-item d-flex justify-content-between align-items-start';
-            li.innerHTML = `
-                <div class="ms-2 me-auto">
-                <div class="fw-bold">${r.filename}</div>
-                ${r.status === 'ok'
-                    ? `API ID: <code>${r.api_id}</code>`
-                    : `<span class="text-danger">${r.error || 'Error'}</span>`}
-                </div>
-                <span class="badge ${r.status === 'ok' ? 'bg-primary' : 'bg-danger'} rounded-pill">
-                ${r.status === 'ok' ? 'Enviado' : 'ERR'}
-                </span>
-            `;
-            lista.appendChild(li);
-            });
-
-            // Mostrar modal de resultados
-            new bootstrap.Modal(document.getElementById('modalResultado')).show();
-
-            // Limpiar archivos y preview
-            document.getElementById('file_in').value = '';
-            document.getElementById('fileList').innerHTML = '';
-            document.getElementById('pdfEmbed').style.display = 'none';
-            document.getElementById('previewDropdownWrap').classList.add('d-none');
-            document.getElementById('btnAbrirModal').disabled = true;
-            } else {
+        const data = await resp.json().catch(() => ({}));
+        if (!data.ok) {
             const firstErr = (data.results || []).find(r => r.status === 'error');
             throw new Error(firstErr?.error || data.error || 'No se pudo firmar.');
-            }
-        } catch (err) {
-            alerta.textContent = ('' + err.message).includes('PIN') ? 'PIN incorrecto' :
-                                ('' + err.message).includes('credencial') ? 'Credenciales inválidas' :
-                                'No se pudo completar la firma. Intenta de nuevo.';
-            alerta.classList.remove('d-none');
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Firmar';
-            // Limpia los campos sensibles del modal
-            formCred.elements['sign_password'].value = '';
-            formCred.elements['sign_pin'].value = '';
         }
-        });
-    })();
 
-    </script>
+        // Cerrar modal credenciales y limpiar
+        bootstrap.Modal.getInstance(document.getElementById('modalCredenciales')).hide();
+        formCred.reset();
+        formCred.elements['sign_password'].value = '';
+        formCred.elements['sign_pin'].value = '';
+
+        // Pintar resultados iniciales y arrancar polling por cada documento OK
+        const lista = document.getElementById('resultadoLista');
+        lista.innerHTML = '';
+
+        (data.results || []).forEach((r, idx) => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item d-flex justify-content-between align-items-start';
+
+            const left = document.createElement('div');
+            left.className = 'ms-2 me-auto';
+            left.innerHTML = `
+            <div class="fw-bold">${r.filename}</div>
+            ${r.status === 'ok'
+                ? `API ID: <code>${r.api_id}</code>`
+                : `<span class="text-danger">${r.error || 'Error'}</span>`}
+            <div class="small text-muted mt-1" id="st-${idx}">${r.status === 'ok' ? 'Esperando…' : ''}</div>
+            `;
+
+            const badge = document.createElement('span');
+            badge.className = 'badge ' + (r.status === 'ok' ? 'bg-primary' : 'bg-danger') + ' rounded-pill';
+            badge.id = `bd-${idx}`;
+            badge.textContent = (r.status === 'ok') ? 'Pendiente' : 'ERR';
+
+            li.appendChild(left);
+            li.appendChild(badge);
+            lista.appendChild(li);
+
+            // Si se envió bien, iniciar polling usando el REF que devuelve el backend
+            if (r.status === 'ok') {
+            if (!r.ref) {
+                document.getElementById(`st-${idx}`).textContent = 'Sin ref en respuesta (avisa al backend).';
+                badge.className = 'badge bg-warning rounded-pill';
+                badge.textContent = 'Revisar';
+            } else {
+                startPolling(r.ref, badge, document.getElementById(`st-${idx}`));
+            }
+            }
+        });
+
+        // Mostrar modal de resultados
+        new bootstrap.Modal(document.getElementById('modalResultado')).show();
+
+        // Reset de inputs de archivo/preview
+        document.getElementById('file_in').value = '';
+        document.getElementById('fileList').innerHTML = '';
+        document.getElementById('pdfEmbed').style.display = 'none';
+        document.getElementById('previewDropdownWrap').classList.add('d-none');
+        document.getElementById('btnAbrirModal').disabled = true;
+
+        } catch (err) {
+        alerta.textContent =
+            ('' + err.message).includes('PIN') ? 'PIN incorrecto' :
+            ('' + err.message).includes('credencial') ? 'Credenciales inválidas' :
+            'No se pudo completar la firma. Intenta de nuevo.';
+        alerta.classList.remove('d-none');
+        } finally {
+        btn.disabled = false; btn.textContent = 'Firmar';
+        }
+    });
+    })();
+</script>
 
     <style>
         *{box-sizing:border-box;font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
