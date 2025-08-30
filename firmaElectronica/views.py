@@ -152,6 +152,12 @@ def firma_home(request):
         if not files:
             return JsonResponse({'ok': False, 'error': 'No se recibieron archivos.'}, status=400)
 
+        if len(files) > 5:
+            return JsonResponse(
+                {'ok': False, 'error': 'Máximo 5 archivos por lote.'},
+                status=400
+            )
+
         results = []
 
         for f in files:

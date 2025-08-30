@@ -188,38 +188,55 @@
     }
 
     function previewPDF(event){
-    const files = [...(event.target.files || [])];
-    const list = document.getElementById('fileList');
-    const ddWrap = document.getElementById('previewDropdownWrap');
-    list.innerHTML = '';
+        // 1) Tomamos los archivos del input
+        let input = event.target;                    // <input type="file" ...>
+        let filesArr = Array.from(input.files || []);
 
-    if(!files.length){
-        ddWrap.classList.add('d-none');
-        document.getElementById('pdfEmbed').style.display = 'none';
-        document.getElementById('btnAbrirModal').disabled = true;
-        return;
-    }
+        // 2) Enforce límite de 5 ANTES de cualquier otra cosa
+        if (filesArr.length > 5) {
+            alert('Solo puedes seleccionar hasta 5 archivos por lote.');
+            const dt = new DataTransfer();
+            for (let i = 0; i < 5; i++) dt.items.add(filesArr[i]);
+            input.files = dt.files;                    // ← rehidrata el input
+            filesArr = Array.from(input.files);        // ← vuelve a leer los 5
+        }
 
-    const allPdf = files.every(isPdf);
-    document.getElementById('btnAbrirModal').disabled = !allPdf;
+        // 3) A partir de aquí usa SIEMPRE filesArr (no vuelvas a usar event.target.files)
+        const list   = document.getElementById('fileList');
+        const ddWrap = document.getElementById('previewDropdownWrap');
+        const embed  = document.getElementById('pdfEmbed');
+        list.innerHTML = '';
 
-    files.forEach(f => {
-        const li = document.createElement('li');
-        li.textContent = f.name;
-        li.title = f.name;
-        li.classList.add('ellipsis');
-        list.appendChild(li);
-    });
+        if (!filesArr.length) {
+            ddWrap.classList.add('d-none');
+            embed.style.display = 'none';
+            document.getElementById('btnAbrirModal').disabled = true;
+            return;
+        }
 
-    if(files.length > 1){ ddWrap.classList.remove('d-none'); }
-    else{ ddWrap.classList.add('d-none'); }
+        const allPdf = filesArr.every(isPdf);
+        document.getElementById('btnAbrirModal').disabled = !allPdf;
 
-    fillPreviewMenu(files);
-    setPreviewLabel(files[0].name);
-    loadPreviewFile(files[0]);
+        filesArr.forEach(f => {
+            const li = document.createElement('li');
+            li.textContent = f.name;
+            li.title = f.name;
+            li.classList.add('ellipsis');
+            list.appendChild(li);
+        });
 
-    window.__selectedPdfFiles = files;
-    }
+        if (filesArr.length > 1){ ddWrap.classList.remove('d-none'); }
+        else{ ddWrap.classList.add('d-none'); }
+
+        fillPreviewMenu(filesArr);
+        setPreviewLabel(filesArr[0].name);
+        loadPreviewFile(filesArr[0]);
+
+        // Guarda la selección actual para otros usos si lo necesitas
+        window.__selectedPdfFiles = filesArr;
+        }
+
+
 
     /* ========= POLLING (modo pull) ========= */
     const SIGN_STATUS_URL = "{% url 'sign_status' %}"; // endpoint Django
@@ -239,24 +256,23 @@
         const data = await res.json();
 
         if (data.ready) {
-            // Firmado listo
             clearInterval(interval);
-            $badge.className = 'badge bg-success rounded-pill';
+            $badge.className = 'badge bg-success rounded-pill result-badge';
             $badge.textContent = 'Firmado';
+            $statusContainer.classList.remove('text-danger');
+            $statusContainer.classList.add('brief');
             $statusContainer.innerHTML = '';
             const a = document.createElement('a');
-            a.href = data.url;
-            a.target = '_blank';
-            a.textContent = 'Descargar PDF firmado';
+            a.href = data.url; a.target = '_blank'; a.textContent = 'Descargar PDF firmado';
             $statusContainer.appendChild(a);
             return;
-        }
-
-        // Estados intermedios
-        if (data.state === 'failed' || data.state === 'error') {
+            }
+            if (data.state === 'failed' || data.state === 'error') {
             clearInterval(interval);
-            $badge.className = 'badge bg-danger rounded-pill';
+            $badge.className = 'badge bg-danger rounded-pill result-badge';
             $badge.textContent = 'Error';
+            $statusContainer.classList.remove('brief');
+            $statusContainer.classList.add('text-danger');
             $statusContainer.textContent = data.error || 'Error en firma';
             return;
         }
@@ -280,6 +296,12 @@
     const alerta = document.getElementById('alertaModal');
 
     const inputPdf = document.querySelector('#file_in');
+
+    if ((inputPdf.files || []).length > 5) {
+        alert('Solo puedes enviar hasta 5 archivos por lote.');
+        return; // no continúes
+    }
+
     if (inputPdf) {
         inputPdf.addEventListener('change', () => {
         const files = inputPdf.files || [];
@@ -344,38 +366,47 @@
 
         (data.results || []).forEach((r, idx) => {
             const li = document.createElement('li');
-            li.className = 'list-group-item d-flex justify-content-between align-items-start';
+            li.className = 'list-group-item result-item';
 
             const left = document.createElement('div');
-            left.className = 'ms-2 me-auto';
+            left.className = 'result-left';
+
+            // breve (truncado) y detalle opcional
+            const briefText = (r.status === 'ok')
+                ? `API ID: ${r.api_id}`
+                : (r.error || 'Error');
+
+            // contenido izquierdo
             left.innerHTML = `
-            <div class="fw-bold">${r.filename}</div>
-            ${r.status === 'ok'
-                ? `API ID: <code>${r.api_id}</code>`
-                : `<span class="text-danger">${r.error || 'Error'}</span>`}
-            <div class="small text-muted mt-1" id="st-${idx}">${r.status === 'ok' ? 'Esperando…' : ''}</div>
+                <div class="title">${r.filename}</div>
+                <div id="st-${idx}" class="brief">${briefText}</div>
+                ${r.status !== 'ok' && r.error ? `
+                <details>
+                    <summary>Ver detalle</summary>
+                    <pre>${r.error}</pre>
+                </details>` : ``}
             `;
 
             const badge = document.createElement('span');
-            badge.className = 'badge ' + (r.status === 'ok' ? 'bg-primary' : 'bg-danger') + ' rounded-pill';
             badge.id = `bd-${idx}`;
-            badge.textContent = (r.status === 'ok') ? 'Pendiente' : 'ERR';
+            badge.className = 'badge rounded-pill result-badge ' + (r.status === 'ok' ? 'bg-primary' : 'bg-danger');
+            badge.textContent = (r.status === 'ok') ? 'Pendiente' : 'Error';
 
             li.appendChild(left);
             li.appendChild(badge);
             lista.appendChild(li);
 
-            // Si se envió bien, iniciar polling usando el REF que devuelve el backend
+            // si se envió bien, iniciar polling
             if (r.status === 'ok') {
-            if (!r.ref) {
-                document.getElementById(`st-${idx}`).textContent = 'Sin ref en respuesta (avisa al backend).';
-                badge.className = 'badge bg-warning rounded-pill';
+                if (!r.ref) {
+                document.getElementById(`st-${idx}`).textContent = 'Sin ref en respuesta.';
+                badge.className = 'badge bg-warning rounded-pill result-badge';
                 badge.textContent = 'Revisar';
-            } else {
+                } else {
                 startPolling(r.ref, badge, document.getElementById(`st-${idx}`));
+                }
             }
-            }
-        });
+            });
 
         // Mostrar modal de resultados
         new bootstrap.Modal(document.getElementById('modalResultado')).show();
@@ -468,6 +499,35 @@
             overflow: hidden;
             text-overflow: ellipsis;
         }
+
+        /* Ítems de resultado: contenido a la izquierda, badge a la derecha */
+        .list-group-item.result-item{
+        display:flex; align-items:flex-start; justify-content:space-between; gap:.75rem;
+        }
+
+        /* Columna izquierda puede crecer; evita desbordes */
+        .result-left{ flex:1 1 auto; min-width:0; }
+
+        /* Título/archivo en negrita no se rompe feo */
+        .result-left .title{ font-weight:600; margin-bottom:.25rem; }
+
+        /* Resumen de estado/error: máx 2 líneas, con “…” */
+        .result-left .brief{
+        display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+        overflow:hidden; text-overflow:ellipsis; word-break:break-word;
+        color:#6c757d; /* small-muted vibe */
+        }
+
+        /* Bloque detalle expandible */
+        .result-left details{ margin-top:.25rem; }
+        .result-left details pre{
+        margin: .25rem 0 0 0; max-height:160px; overflow:auto; white-space:pre-wrap; word-break:break-word;
+        background:#f8f9fa; border:1px solid #e9ecef; border-radius:.375rem; padding:.5rem;
+        }
+
+        /* Badge a la derecha no se deforma */
+        .result-badge{ white-space:nowrap; flex:0 0 auto; }
+
 
 
     </style>
