@@ -4,6 +4,7 @@ from django.http import JsonResponse, HttpResponseBadRequest, HttpResponse
 from .models import FirmaElectronica
 import requests
 from requests.exceptions import Timeout
+from requests.adapters import HTTPAdapter
 from requests_toolbelt.multipart.encoder import MultipartEncoder
 from usuarios.decorators import permiso_firma_requerido
 from django.conf import settings
@@ -14,6 +15,33 @@ from django.utils import timezone
 import io
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.views.decorators.http import require_GET
+from urllib3.util.retry import Retry
+import random
+import time
+
+
+# Sesión global con pooling + retries
+def _build_session():
+    retry = Retry(
+        total=getattr(settings, "SIGNBOX_MAX_RETRIES", 3),
+        backoff_factor=getattr(settings, "SIGNBOX_BACKOFF_FACTOR", 0.6),
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=frozenset(["GET", "POST"]),
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(
+        pool_connections=getattr(settings, "SIGNBOX_POOL_CONNECTIONS", 20),
+        pool_maxsize=getattr(settings, "SIGNBOX_POOL_MAXSIZE", 50),
+        max_retries=retry,
+    )
+    s = requests.Session()
+    s.mount("http://", adapter)
+    s.mount("https://", adapter)
+    return s
+
+_SESSION = _build_session()
+_REQ_TIMEOUT = getattr(settings, "SIGNBOX_REQUEST_TIMEOUT", 20)
+_RES_TIMEOUT = getattr(settings, "SIGNBOX_RESULT_TIMEOUT", 40)
 
 
 def _build_endpoint_with_id(base: str, pattern: str, api_id: str) -> str:
@@ -48,24 +76,19 @@ def _parse_job_text(txt: str):
 
 def _signbox_job_status(api_id: str):
     url = _build_endpoint_with_id(settings.SIGNBOX_BASE_URL, settings.SIGNBOX_JOB_ENDPOINT, api_id)
-    r = requests.get(url, timeout=10)      # <-- GET
+    r = _SESSION.get(url, timeout=_REQ_TIMEOUT)
     state, typ = _parse_job_text(r.text)
     return {"state": state, "type": typ, "raw": r.text, "status_code": r.status_code}
 
 def _signbox_fetch_result(api_id: str) -> bytes:
     url = _build_endpoint_with_id(settings.SIGNBOX_BASE_URL, settings.SIGNBOX_RESULT_ENDPOINT, api_id)
-    r = requests.get(url, timeout=30)      # <-- GET
+    r = _SESSION.get(url, timeout=_RES_TIMEOUT)
     r.raise_for_status()
     return r.content
 
 
 @require_GET
 def sign_status(request):
-    """
-    Cliente (JS) nos pregunta periódicamente por el estado.
-    Si el job ya terminó, descargamos el PDF desde result y lo guardamos en archivo_firmado.
-    Devuelve JSON con: {ready:bool, state:str, url?:str, error?:str}
-    """
     ref = request.GET.get('ref')
     if not ref:
         return JsonResponse({'ready': False, 'state': 'error', 'error': 'Falta ref'}, status=400)
@@ -75,19 +98,25 @@ def sign_status(request):
     except FirmaElectronica.DoesNotExist:
         return JsonResponse({'ready': False, 'state': 'error', 'error': 'Ref no encontrada'}, status=404)
 
-    # ¿Ya listo?
+    # Si ya está guardado el PDF firmado, listo
     if firma.archivo_firmado:
         return JsonResponse({'ready': True, 'state': 'done', 'url': firma.archivo_firmado.url})
 
+    # 🔴 NUEVO: con webhooks activos no consultamos a SignBox
+    if getattr(settings, "USE_SIGNBOX_WEBHOOKS", False):
+        if firma.estado == FirmaElectronica.Estados.ERROR:
+            return JsonResponse({'ready': False, 'state': 'failed', 'error': firma.error_msg or 'Error'})
+        # Aún procesando; esperamos a que llegue url_out
+        return JsonResponse({'ready': False, 'state': 'processing'})
+
+    # --- Modo polling (webhooks desactivados): flujo actual ---
     if not firma.api_id:
         return JsonResponse({'ready': False, 'state': 'waiting', 'error': 'Sin api_id aún'})
 
-    # 1) Consulta estado del job
     job = _signbox_job_status(firma.api_id)
     state = (job.get('state') or '').lower()
 
     if state in ('done', 'success', 'completed'):
-        # 2) Descarga el PDF firmado desde result y guarda en el modelo
         try:
             pdf_bytes = _signbox_fetch_result(firma.api_id)
             filename = f"signed_{firma.api_id}.pdf"
@@ -103,13 +132,11 @@ def sign_status(request):
 
     if state in ('failed', 'error'):
         firma.estado = FirmaElectronica.Estados.ERROR
-        # deja trazabilidad
         raw = job.get('raw','')[:200]
         firma.error_msg = f'Job failed: {raw}'
         firma.save(update_fields=['estado','error_msg'])
         return JsonResponse({'ready': False, 'state': 'failed', 'error': firma.error_msg})
 
-    # sigue procesando
     return JsonResponse({'ready': False, 'state': state or 'processing'})
 
 
@@ -126,28 +153,23 @@ def firma_home(request):
             return JsonResponse({'ok': False, 'error': 'No se recibieron archivos.'}, status=400)
 
         results = []
+
         for f in files:
             try:
-                # 1) Leemos bytes una vez y construimos un File para guardar
-                file_content = f.read()
-                file_io = io.BytesIO(file_content)
-                django_file = InMemoryUploadedFile(
-                    file_io, 'file_in', f.name, 'application/pdf', len(file_content), None
-                )
-
-                # 2) Creamos registro EN PROCESO y emitimos token/ref para callbacks
+                # 1) GUARDAR SIN LEER A MEMORIA
                 firma = FirmaElectronica(
-                    archivo=django_file,
                     nombre_original=f.name,
                     usuario=request.user,
                     estado=FirmaElectronica.Estados.EN_PROCESO,
                 )
                 firma.issue_token()
+                # Guardar el archivo subido directamente
+                firma.archivo.save(f.name, f)   # <--- esto persiste el upload
                 firma.save()
 
                 use_webhooks = getattr(settings, "USE_SIGNBOX_WEBHOOKS", False)
 
-                # === 1) Campos base SIN webhooks ===
+                # 2) CAMPOS BASE
                 fields = {
                     'env': settings.SIGNBOX_ENV,
                     'format': settings.SIGNBOX_FORMAT,
@@ -163,42 +185,46 @@ def firma_home(request):
                     'npage': str(settings.SIGNBOX_NPAGE),
                     'reason': settings.SIGNBOX_REASON,
                     'location': settings.SIGNBOX_LOCATION,
-                    'file_in': (f.name, file_content, 'application/pdf'),
                 }
 
-                # === 2) SOLO si habilitas webhooks, añadimos urlback/url_out ===
+                # 3) archivo para el multipart como STREAM (no bytes en RAM)
+                fh = firma.archivo.open('rb')  # <<-- handle de lectura
+                fields['file_in'] = (firma.nombre_original or f.name, fh, 'application/pdf')
+
+                # 4) WEBHOOKS (si corresponde)
                 if use_webhooks:
                     from django.urls import reverse, NoReverseMatch
-                    base_url = getattr(settings, "PUBLIC_BASE_URL", "").rstrip("/")
-                    if not base_url:
-                        base_url = request.build_absolute_uri('/').rstrip('/')
+                    base_url = getattr(settings, "PUBLIC_BASE_URL", "").rstrip("/") or request.build_absolute_uri('/').rstrip('/')
                     try:
                         fields['urlback'] = f"{base_url}{reverse('signbox_urlback')}?ref={firma.ref}&token={firma.cb_token}"
-                        fields['url_out']  = f"{base_url}{reverse('signbox_url_out')}?ref={firma.ref}&token={firma.cb_token}"
+                        fields['url_out'] = f"{base_url}{reverse('signbox_url_out')}?ref={firma.ref}&token={firma.cb_token}"
                     except NoReverseMatch:
-                        pass  # no rompemos si aún no están esas rutas
+                        pass
 
-                # === 3) Enviar a SignBox ===
+                # 5) Enviar
                 multipart_data = MultipartEncoder(fields=fields)
                 headers = {'Content-Type': multipart_data.content_type}
                 endpoint = f"{settings.SIGNBOX_BASE_URL}{settings.SIGNBOX_SIGN_ENDPOINT}"
 
-                resp = requests.post(endpoint, headers=headers, data=multipart_data, timeout=10)
-                print(f"[API] {f.name}: {resp.status_code} -> {resp.text}")
+                resp = _SESSION.post(endpoint, headers=headers, data=multipart_data, timeout=_REQ_TIMEOUT)
+                if resp.status_code == 429:
+                    time.sleep(0.5 + random.random())
+                    resp = _SESSION.post(endpoint, headers=headers, data=multipart_data, timeout=_REQ_TIMEOUT)
 
-                # === 4) Parsear respuesta y devolver ref para el polling ===
+                print(f"[API] {firma.nombre_original or f.name}: {resp.status_code} -> {resp.text}")
+
                 if resp.status_code == 200 and 'id=' in resp.text:
                     api_id = resp.text.split('=', 1)[1].strip()
                     firma.api_id = api_id
                     firma.save(update_fields=['api_id'])
-                    results.append({'filename': f.name, 'api_id': api_id, 'status': 'ok', 'ref': str(firma.ref)})
+                    results.append({'filename': firma.nombre_original or f.name, 'api_id': api_id, 'status': 'ok', 'ref': str(firma.ref)})
                 else:
                     firma.estado = FirmaElectronica.Estados.ERROR
                     firma.error_msg = f'API {resp.status_code}: {resp.text[:200]}'
                     firma.save(update_fields=['estado', 'error_msg'])
-                    results.append({'filename': f.name, 'api_id': None, 'status': 'error',
+                    results.append({'filename': firma.nombre_original or f.name, 'api_id': None, 'status': 'error',
                                     'error': f'API {resp.status_code}: {resp.text[:200]}'})
-    
+
             except Timeout:
                 firma.estado = FirmaElectronica.Estados.ERROR
                 firma.error_msg = 'Tiempo de espera excedido'
@@ -210,11 +236,17 @@ def firma_home(request):
                 firma.save(update_fields=['estado', 'error_msg'])
                 results.append({'filename': f.name, 'api_id': None, 'status': 'error', 'error': f'Error de red: {str(e)}'})
             except Exception as e:
-                # Cualquier error inesperado deja traza en el registro ya creado
                 firma.estado = FirmaElectronica.Estados.ERROR
                 firma.error_msg = f'Error inesperado: {str(e)}'
                 firma.save(update_fields=['estado', 'error_msg'])
                 results.append({'filename': f.name, 'api_id': None, 'status': 'error', 'error': f'Error inesperado: {str(e)}'})
+            finally:
+                # Cerrar el handle si lo abrimos
+                try:
+                    fh.close()
+                except Exception:
+                    pass
+
 
         any_ok = any(r.get('status') == 'ok' for r in results)
         return JsonResponse({'ok': any_ok, 'results': results})
