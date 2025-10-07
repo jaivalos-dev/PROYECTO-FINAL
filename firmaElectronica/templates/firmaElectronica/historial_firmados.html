@@ -78,6 +78,45 @@
     .footer .socials{display:flex;gap:10px}
     .footer a{color:#fff;text-decoration:none;font-size:1.1rem}
     .footer a:hover{opacity:.75}
+    /* === KPIs (tarjetas de resumen) === */
+    .kpis{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;margin-bottom:16px}
+    .kpi-card{grid-column:span 12;background:#fff;border:1px solid #e3e6ea;border-radius:12px;padding:16px;
+      text-decoration:none;color:inherit;box-shadow:var(--shadow);display:block}
+    @media(min-width:720px){.kpi-card{grid-column:span 3}}
+    .kpi-card h3{font-size:.9rem;color:var(--muted);margin-bottom:6px}
+    .kpi-card .num{font-size:1.8rem;font-weight:800}
+    .kpi-total{border-left:4px solid #2b2f36}
+    .kpi-success{border-left:4px solid var(--success)}
+    .kpi-pending{border-left:4px solid var(--secondary)}
+    .kpi-danger{border-left:4px solid var(--danger)}
+    /* Alinear y centrar el botón con el resto de campos */
+    .button-field{
+      display:flex;
+      flex-direction:column;
+      align-self:end;          /* por si el grid hace otra fila */
+      justify-self:center;     /* centrar dentro de su columna */
+      align-items:center;
+    }
+
+    /* El label “fantasma” da la misma altura que los demás labels */
+    .button-field > label{
+      margin-bottom:6px;       /* igual que los otros labels */
+      display:block;
+    }
+
+    .btn-filter{ min-width:140px; height:40px; }
+
+    /* En pantallas pequeñas, que ocupe todo el ancho */
+    @media (max-width: 719px){
+      .button-field{ align-items:stretch; }
+      .btn-filter{ width:100%; }
+    }
+
+    .detalle-row td{
+      background:#fff;
+      border-top:1px solid #e9edf3;
+    }
+
   </style>
 </head>
 <body>
@@ -87,7 +126,10 @@
     <div class="left">
       <a href="{% url 'agenda_home' %}">Agenda</a>
       <a href="{% url 'firma_home' %}">Firma Electrónica</a>
-      <a href="{% url 'historial_firmados' %}">Historial</a>
+      {% if request.user.is_authenticated and request.user.perfil and request.user.perfil.permiso_firma %}
+        <a class="nav-link" href="{% url 'historial_firmados' %}">Historial</a>
+        <a href="{% url 'reportes' %}">Reportes</a>
+      {% endif %}
     </div>
     <div class="logo">Mi Empresa</div>
     <div class="right">
@@ -111,12 +153,41 @@
 
         <h2 class="title">Historial de documentos firmados</h2>
 
+        <!-- KPIs -->
+        <div class="kpis">
+          <a class="kpi-card kpi-total"
+            href="?fecha_ini={{ fecha_ini }}&fecha_fin={{ fecha_fin }}&q={{ q }}">
+            <h3>Total</h3>
+            <div class="num">{{ kpis.total }}</div>
+          </a>
+
+          <a class="kpi-card kpi-success"
+            href="?estado=ok&fecha_ini={{ fecha_ini }}&fecha_fin={{ fecha_fin }}&q={{ q }}">
+            <h3>Firmados</h3>
+            <div class="num">{{ kpis.firmados }}</div>
+          </a>
+
+          <a class="kpi-card kpi-pending"
+            href="?estado=pendiente&fecha_ini={{ fecha_ini }}&fecha_fin={{ fecha_fin }}&q={{ q }}">
+            <h3>Pendientes</h3>
+            <div class="num">{{ kpis.pendientes }}</div>
+          </a>
+
+          <a class="kpi-card kpi-danger"
+            href="?estado=error&fecha_ini={{ fecha_ini }}&fecha_fin={{ fecha_fin }}&q={{ q }}">
+            <h3>Errores</h3>
+            <div class="num">{{ kpis.errores }}</div>
+          </a>
+        </div>
+
         <!-- Mensajes Django (por si se redirige cuando falta el archivo) -->
         {% if messages %}
           {% for m in messages %}
-            <div class="alert {% if m.tags == 'error' %}alert-danger{% elif m.tags == 'success' %}alert-success{% else %}alert-info{% endif %}">
-              {{ m }}
-            </div>
+            {% if 'error' in m.tags or 'info' in m.tags %}
+              <div class="alert {% if 'error' in m.tags %}alert-danger{% else %}alert-info{% endif %}">
+                {{ m }}
+              </div>
+            {% endif %}
           {% endfor %}
         {% endif %}
 
@@ -143,8 +214,15 @@
             <label>Buscar</label>
             <input type="text" name="q" placeholder="archivo o error..." value="{{ q }}">
           </div>
-          <div class="field col-3">
-            <button class="btn btn-primary w-100" type="submit">
+          {% if es_admin %}
+            <div class="field col-3">
+              <label>Usuario</label>
+              <input type="text" name="usuario" placeholder="username o ID" value="{{ usuario_q }}">
+            </div>
+          {% endif %}
+          <div class="field col-3 button-field">
+            <label>&nbsp;</label>  <!-- placeholder para igualar altura -->
+            <button class="btn btn-primary btn-filter" type="submit">
               <i class="fa-solid fa-filter" style="margin-right:8px;"></i>Filtrar
             </button>
           </div>
@@ -160,11 +238,13 @@
                 <th>Archivo</th>
                 <th>Estado</th>
                 <th class="text-end">Acciones</th>
+                <th>Detalle</th>
               </tr>
             </thead>
             <tbody>
               {% for d in page_obj.object_list %}
               {% with af=d.archivo_firmado|default_if_none:"" %}
+              <!-- Fila principal -->
               <tr>
                 <td class="text-nowrap">{{ d.fecha_creacion|date:"Y-m-d H:i" }}</td>
 
@@ -190,7 +270,7 @@
 
                 <td>
                   {% if d.error_msg %}
-                    <span class="badge badge-danger" title="{{ d.error_msg }}">{{ "Error" }}</span>
+                    <span class="badge badge-danger" title="{{ d.error_msg }}">Error</span>
                   {% elif af %}
                     <span class="badge badge-success">Firmado</span>
                   {% else %}
@@ -200,6 +280,7 @@
 
                 <td class="text-end">
                   {% if af %}
+                    {# Ajusta el nombre de la URL si usas namespacing: 'firma:descargar_documento' #}
                     <a href="{% url 'descargar_documento_firmado' d.id %}" class="btn btn-outline">
                       <i class="fa-solid fa-download" style="margin-right:6px;"></i>Descargar
                     </a>
@@ -207,16 +288,36 @@
                     <button class="btn btn-disabled" disabled>No disponible</button>
                   {% endif %}
                 </td>
+
+                <td class="text-end">
+                  <button
+                    class="btn btn-outline"
+                    data-doc="{{ d.id }}"
+                    data-url="{% url 'historial_detalle' d.id %}"  {# si usas namespacing: 'firma:historial_detalle' #}
+                    onclick="toggleDetalle(this)"
+                  >
+                    <i class="fa-solid fa-caret-down" style="margin-right:6px"></i>Detalle
+                  </button>
+                </td>
+
+              </tr>
+
+              <!-- Fila de detalle (colspan = total de columnas) -->
+              <tr id="detalle-{{ d.id }}" class="detalle-row" style="display:none;">
+                <td colspan="6">
+                  <div class="detalle-holder"></div>
+                </td>
               </tr>
               {% endwith %}
               {% empty %}
               <tr>
-                <td colspan="5" style="text-align:center;padding:22px;color:var(--muted);">
+                <td colspan="6" style="text-align:center;padding:22px;color:var(--muted);">
                   No hay registros que coincidan con el filtro.
                 </td>
               </tr>
               {% endfor %}
             </tbody>
+
           </table>
         </div>
 
@@ -254,3 +355,38 @@
   </footer>
 </body>
 </html>
+
+
+<script>
+  async function toggleDetalle(btn){
+  const id = btn.getAttribute('data-doc');
+  const url = btn.getAttribute('data-url');   // URL ya resuelta por Django
+  const row = document.getElementById('detalle-' + id);
+  const holder = row.querySelector('.detalle-holder');
+
+  if(row.style.display === 'none'){
+    if(!holder.dataset.loaded){
+      btn.disabled = true;
+      const original = btn.innerHTML;
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px"></i>Cargando...';
+      try{
+        const resp = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        if(!resp.ok) throw new Error('HTTP ' + resp.status);
+        holder.innerHTML = await resp.text();
+        holder.dataset.loaded = '1';
+      }catch(err){
+        holder.innerHTML = '<div style="padding:12px;color:#8a1c1c;background:#fde2e2;border:1px solid #f7c9c9;border-radius:8px">No se pudo cargar el detalle.</div>';
+        console.error('Detalle documento error:', err);
+      }finally{
+        btn.disabled = false;
+        btn.innerHTML = original;
+      }
+    }
+    row.style.display = '';
+    btn.querySelector('i').classList.replace('fa-caret-down','fa-caret-up');
+  }else{
+    row.style.display = 'none';
+    btn.querySelector('i').classList.replace('fa-caret-up','fa-caret-down');
+  }
+}
+</script>

@@ -1,0 +1,96 @@
+<div class="detalle-doc" style="border:1px solid #e3e6ea;border-radius:12px;padding:16px;background:#fff;margin:10px 0">
+  <div style="display:grid;grid-template-columns:repeat(12,1fr);gap:12px">
+    <div style="grid-column:span 12">
+      <h4 style="margin:0 0 8px 0">Auditoría del documento</h4>
+      <div style="color:#6c757d;font-size:.9rem">
+        {% if doc.nombre_original %}<strong>Nombre:</strong> {{ doc.nombre_original }} · {% endif %}
+        <strong>ID:</strong> {{ doc.id }} ·
+        <strong>Usuario:</strong> {% if doc.usuario.first_name or doc.usuario.last_name %}{{ doc.usuario.get_full_name|default:doc.usuario.username }}{% else %}{{ doc.usuario.username }}{% endif %}
+        {% if es_admin and doc.api_id %} · <strong>API ID:</strong> {{ doc.api_id }}{% endif %}
+      </div>
+    </div>
+
+    <!-- Timeline simple -->
+    <div style="grid-column:span 12">
+      <ul style="list-style:none;padding:0;margin:10px 0">
+        <li style="margin-bottom:6px">
+          🟢 <strong>Creado</strong> — {{ doc.fecha_creacion|date:"Y-m-d H:i" }}
+        </li>
+        {% if doc.error_msg %}
+        <li style="margin-bottom:6px">
+          🔴 <strong>Error</strong> — <span title="{{ doc.error_msg }}">{{ doc.error_msg|truncatechars:200 }}</span>
+        </li>
+        {% endif %}
+        {% if doc.archivo_firmado %}
+        <li style="margin-bottom:6px">
+          ✅ <strong>Firmado</strong>
+          {% if firmado_en %}— {{ firmado_en|date:"Y-m-d H:i" }}{% endif %}
+        </li>
+        {% else %}
+        <li style="margin-bottom:6px">
+          ⏳ <strong>Pendiente de firma</strong>
+        </li>
+        {% endif %}
+      </ul>
+    </div>
+
+    <!-- Descargas -->
+    <div style="grid-column:span 12">
+      <h5 style="margin:8px 0">Descargas registradas ({{ descargas|length }})</h5>
+      <div style="overflow:auto">
+        <table style="width:100%;border-collapse:separate;border-spacing:0">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:8px;background:#f3f5f8">Fecha</th>
+              {% if es_admin %}
+                <th style="text-align:left;padding:8px;background:#f3f5f8">Usuario</th>
+                <th style="text-align:left;padding:8px;background:#f3f5f8">IP</th>
+                <th style="text-align:left;padding:8px;background:#f3f5f8">User-Agent</th>
+              {% else %}
+                <th style="text-align:left;padding:8px;background:#f3f5f8">Usuario</th>
+                <th style="text-align:left;padding:8px;background:#f3f5f8">IP</th>
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in descargas %}
+            <tr>
+              <td style="padding:8px;border-top:1px solid #eef0f3">{{ d.fecha_descarga|date:"Y-m-d H:i" }}</td>
+              <td style="padding:8px;border-top:1px solid #eef0f3">
+                {% if d.usuario.first_name or d.usuario.last_name %}
+                  {{ d.usuario.get_full_name|default:d.usuario.username }}
+                {% else %}
+                  {{ d.usuario.username }}
+                {% endif %}
+              </td>
+              <td style="padding:8px;border-top:1px solid #eef0f3">{{ d.ip|default:"-" }}</td>
+              {% if es_admin %}
+              <td style="padding:8px;border-top:1px solid #eef0f3">
+                <span title="{{ d.user_agent|default:'-' }}">{{ d.user_agent|default:"-"|truncatechars:80 }}</span>
+              </td>
+              {% endif %}
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="{% if es_admin %}4{% else %}3{% endif %}" style="padding:10px;text-align:center;color:#6c757d">
+                Sin descargas registradas
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Acciones -->
+    <div style="grid-column:span 12;display:flex;gap:8px;justify-content:flex-end">
+      {% if doc.archivo_firmado %}
+        <a href="{% url 'descargar_documento_firmado' doc.id %}" class="btn btn-outline" style="display:inline-flex;align-items:center;height:38px;padding:0 12px;border:1px solid #d6d9de;border-radius:8px;text-decoration:none;color:#2b2f36">
+          <i class="fa-solid fa-download" style="margin-right:6px"></i> Descargar
+        </a>
+      {% else %}
+        <button class="btn btn-disabled" disabled style="height:38px;padding:0 12px;border-radius:8px;background:#eef0f3;color:#9aa1aa;border:1px solid #e1e5ea">No disponible</button>
+      {% endif %}
+    </div>
+  </div>
+</div>

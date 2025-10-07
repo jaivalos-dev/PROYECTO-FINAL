@@ -21,12 +21,19 @@ import random
 import time
 from django.contrib.auth.decorators import login_required
 from django.utils.encoding import smart_str
-from django.db.models import Q
+from django.db.models import Q, Sum, Case, When, Count, IntegerField, Max
 import mimetypes
 from usuarios.decorators import permiso_firma_requerido
 from django.core.paginator import Paginator
 from django.core.files.storage import default_storage
 from django.contrib import messages
+from urllib.parse import quote
+from django.http import Http404, HttpResponse
+from django.shortcuts import get_object_or_404
+from django.apps import apps
+from django.template.loader import render_to_string
+from django.template import TemplateDoesNotExist
+
 
 
 # Sesión global con pooling + retries
@@ -340,56 +347,68 @@ def signbox_url_out(request):
     return JsonResponse({'ok': True})
 
 
-def _get_client_ip(request):
-    xff = request.META.get('HTTP_X_FORWARDED_FOR')
-    return xff.split(',')[0].strip() if xff else request.META.get('REMOTE_ADDR')
-
 @permiso_firma_requerido
 def historial_firmados(request):
-    """
-    Lista de documentos firmados/intentados, basada en FirmaElectronica.
-    Admin/staff: ve todos; usuario normal: solo los suyos.
-    Filtros: fecha_ini, fecha_fin, estado (ok|error|pendiente), q (buscar por nombre/path).
-    """
     es_admin = request.user.is_staff or request.user.is_superuser
 
-    qs = FirmaElectronica.objects.select_related('usuario')
+    base = FirmaElectronica.objects.select_related('usuario')
     if not es_admin:
-        qs = qs.filter(usuario=request.user)
+        base = base.filter(usuario=request.user)
 
-    # Filtros
+    # Filtros generales
     fecha_ini = request.GET.get('fecha_ini')  # YYYY-MM-DD
-    fecha_fin = request.GET.get('fecha_fin')  # YYYY-MM-DD
-    estado = request.GET.get('estado')        # ok|error|pendiente
-    q = request.GET.get('q')                  # búsqueda libre (nombre/path)
+    fecha_fin = request.GET.get('fecha_fin')
+    estado    = request.GET.get('estado')     # ok | error | pendiente | None
+    q         = request.GET.get('q')
+    usuario_q = request.GET.get('usuario')
 
-    if fecha_ini:
-        qs = qs.filter(fecha_creacion__date__gte=fecha_ini)
-    if fecha_fin:
-        qs = qs.filter(fecha_creacion__date__lte=fecha_fin)
-
-    # Derivar estado desde columnas existentes:
-    # - ok: tiene archivo_firmado (no vacío) y sin error
-    # - error: tiene error_msg no vacío
-    # - pendiente: sin archivo_firmado y sin error_msg
-    if estado == 'ok':
-        qs = qs.filter(archivo_firmado__isnull=False).exclude(archivo_firmado='')
-    elif estado == 'error':
-        qs = qs.filter(error_msg__isnull=False).exclude(error_msg='')
-    elif estado == 'pendiente':
-        qs = qs.filter(
-            Q(archivo_firmado__isnull=True) | Q(archivo_firmado=''),
-            Q(error_msg__isnull=True) | Q(error_msg='')
+    base = FirmaElectronica.objects.select_related('usuario')
+    if not es_admin:
+        base = base.filter(usuario=request.user)
+    elif usuario_q:
+        base = base.filter(
+            Q(usuario__username__icontains=usuario_q) |
+            Q(usuario__id__iexact=usuario_q)
         )
 
+    scope = base
+    if fecha_ini:
+        scope = scope.filter(fecha_creacion__date__gte=fecha_ini)
+    if fecha_fin:
+        scope = scope.filter(fecha_creacion__date__lte=fecha_fin)
     if q:
-        qs = qs.filter(
-            Q(nombre_original__icontains=q) |        # <-- agregado
+        scope = scope.filter(
+            Q(nombre_original__icontains=q) |
             Q(archivo_firmado__icontains=q) |
             Q(error_msg__icontains=q)
         )
-    qs = qs.order_by('-fecha_creacion')
-    page_obj = Paginator(qs, 20).get_page(request.GET.get('page'))
+
+    # KPIs (sobre el scope ya filtrado por fechas/búsqueda/rol)
+    q_firmado   = scope.filter(archivo_firmado__isnull=False).exclude(archivo_firmado='')
+    q_error     = scope.filter(error_msg__isnull=False).exclude(error_msg='')
+    q_pendiente = scope.filter(
+        Q(archivo_firmado__isnull=True) | Q(archivo_firmado=''),
+    ).filter(
+        Q(error_msg__isnull=True) | Q(error_msg='')
+    )
+
+    kpis = {
+        'total':      scope.count(),
+        'firmados':   q_firmado.count(),
+        'pendientes': q_pendiente.count(),
+        'errores':    q_error.count(),
+    }
+
+    # Lista (aplica filtro de estado, si viene)
+    qs = scope
+    if estado == 'ok':
+        qs = q_firmado
+    elif estado == 'error':
+        qs = q_error
+    elif estado == 'pendiente':
+        qs = q_pendiente
+
+    page_obj = Paginator(qs.order_by('-fecha_creacion'), 20).get_page(request.GET.get('page'))
 
     return render(request, 'firmaElectronica/historial_firmados.html', {
         'page_obj': page_obj,
@@ -398,6 +417,7 @@ def historial_firmados(request):
         'fecha_fin': fecha_fin or '',
         'estado': estado or '',
         'q': q or '',
+        'kpis': kpis,  # <- NUEVO
     })
 
 def _normalize_media_name(name: str) -> str:
@@ -437,25 +457,21 @@ def descargar_documento_firmado(request, pk):
     if not f:
         raise Http404("Archivo no disponible.")
 
-    fh = None
-    filename = None
-
+    # --- Abrir archivo desde el storage (soporta FieldFile o cadena ruta) ---
     try:
-        # Caso A: FileField (FieldFile)
-        if hasattr(f, 'open') and hasattr(f, 'name'):
+        if hasattr(f, 'open') and hasattr(f, 'name'):  # Caso A: FieldFile
             storage = getattr(f, 'storage', None) or default_storage
-            name = f.name
+            name = f.name  # <-- ¡era f.name, no f.filename!
             if not name or not storage.exists(name):
                 raise FileNotFoundError
             fh = storage.open(name, 'rb')
-            filename = os.path.basename(name)
-        else:
-            # Caso B: cadena ruta relativa/absoluta
+        else:  # Caso B: cadena (ruta relativa/absoluta)
             name = _normalize_media_name(str(f))
             if not name or not default_storage.exists(name):
                 raise FileNotFoundError
             fh = default_storage.open(name, 'rb')
-            filename = os.path.basename(name)
+
+        filename_fs = os.path.basename(name)  # nombre físico en el FS
     except FileNotFoundError:
         messages.error(
             request,
@@ -464,19 +480,150 @@ def descargar_documento_firmado(request, pk):
         )
         return redirect('firma:historial')
 
-    mime_type, _ = mimetypes.guess_type(filename or '')
-    resp = FileResponse(fh, content_type=mime_type or 'application/pdf')
-    resp['Content-Disposition'] = f'attachment; filename="{filename}"'
+    # --- Nombre de descarga: priorizar el nombre_original guardado en BBDD ---
+    desired = getattr(doc, 'nombre_original', None) or filename_fs
+    root, ext = os.path.splitext(desired)
+    if not ext:
+        desired = desired + '.pdf'
 
-    # Log de descarga (no bloquea si falla)
+    mime_type, _ = mimetypes.guess_type(desired)
+    resp = FileResponse(fh, content_type=mime_type or 'application/pdf')
+    # Content-Disposition compatible con UTF-8 (RFC 5987) + fallback
+    resp['Content-Disposition'] = (
+        f"attachment; filename*=UTF-8''{quote(desired)}; filename=\"{smart_str(desired)}\""
+    )
+
+    # Log de descarga (no bloquear si falla)
     try:
         DescargaDocumento.objects.create(
             documento=doc,
             usuario=request.user,
-            ip=(request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip() or request.META.get('REMOTE_ADDR')),
+            ip=(request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip()
+                or request.META.get('REMOTE_ADDR')),
             user_agent=request.META.get('HTTP_USER_AGENT', '')[:512],
         )
     except Exception:
         pass
 
     return resp
+
+@permiso_firma_requerido
+def reportes_firma(request):
+    es_admin  = request.user.is_staff or request.user.is_superuser
+
+    fecha_ini = request.GET.get('fecha_ini')
+    fecha_fin = request.GET.get('fecha_fin')
+    usuario_q = request.GET.get('usuario')  # username o ID
+
+    scope = FirmaElectronica.objects.select_related('usuario')
+    if not es_admin:
+        scope = scope.filter(usuario=request.user)
+    elif usuario_q:
+        scope = scope.filter(
+            Q(usuario__username__icontains=usuario_q) | Q(usuario__id__iexact=usuario_q)
+        )
+
+    if fecha_ini:
+        scope = scope.filter(fecha_creacion__date__gte=fecha_ini)
+    if fecha_fin:
+        scope = scope.filter(fecha_creacion__date__lte=fecha_fin)
+
+    cond_firmado   = Q(archivo_firmado__isnull=False) & ~Q(archivo_firmado='')
+    cond_error     = Q(error_msg__isnull=False) & ~Q(error_msg='')
+    cond_pendiente = (Q(archivo_firmado__isnull=True) | Q(archivo_firmado='')) & (Q(error_msg__isnull=True) | Q(error_msg=''))
+
+    kpis = {
+        'total':      scope.count(),
+        'firmados':   scope.filter(cond_firmado).count(),
+        'pendientes': scope.filter(cond_pendiente).count(),
+        'errores':    scope.filter(cond_error).count(),
+    }
+
+    agrupado = (
+        scope
+        .values('usuario__id','usuario__username','usuario__first_name','usuario__last_name')
+        .annotate(
+            firmados=Sum(Case(When(cond_firmado, then=1), default=0, output_field=IntegerField())),
+            pendientes=Sum(Case(When(cond_pendiente, then=1), default=0, output_field=IntegerField())),
+            errores=Sum(Case(When(cond_error, then=1), default=0, output_field=IntegerField())),
+            total=Count('id'),
+            ultima_firma=Max('fecha_creacion', filter=cond_firmado),
+        )
+        .order_by('-total','-firmados','usuario__username')
+    )
+
+    page_obj = Paginator(agrupado, 20).get_page(request.GET.get('page'))
+
+    return render(request, 'firmaElectronica/reportes.html', {
+        'page_obj': page_obj,
+        'es_admin': es_admin,
+        'fecha_ini': fecha_ini or '',
+        'fecha_fin': fecha_fin or '',
+        'usuario_q': usuario_q or '',
+        'kpis': kpis,
+    })
+
+def _try_signed_datetime(doc):
+    """Intenta inferir la fecha de 'firmado' a partir del archivo almacenado."""
+    f = getattr(doc, 'archivo_firmado', None)
+    try:
+        if hasattr(f, 'name') and f.name:
+            storage = getattr(f, 'storage', None) or default_storage
+            if storage.exists(f.name):
+                # get_modified_time no está en TODOS los storages, por eso el try/except
+                return storage.get_modified_time(f.name)
+        elif isinstance(f, str) and f:
+            if default_storage.exists(f):
+                return default_storage.get_modified_time(f)
+    except Exception:
+        pass
+    return None
+
+@permiso_firma_requerido
+def historial_detalle(request, pk):
+    doc = get_object_or_404(FirmaElectronica, pk=pk)
+
+    es_admin = request.user.is_staff or request.user.is_superuser
+    if not es_admin and doc.usuario_id != request.user.id:
+        raise Http404("No tiene permiso para ver este detalle.")
+
+    # Obtener el modelo DescargaDocumento de forma segura (por si no está importado/creado)
+    DescargaDocumentoModel = apps.get_model('firmaElectronica', 'DescargaDocumento')
+    if DescargaDocumentoModel:
+        descargas = (DescargaDocumentoModel.objects
+                     .filter(documento=doc)
+                     .select_related('usuario')
+                     .order_by('-fecha_descarga'))
+    else:
+        descargas = []
+
+    # Fecha "firmado" aproximada según el archivo en storage (si existe)
+    firmado_en = _try_signed_datetime(doc) if '_try_signed_datetime' in globals() else None
+
+    ctx = {
+        'doc': doc,
+        'descargas': descargas,
+        'firmado_en': firmado_en,
+        'es_admin': es_admin,
+    }
+
+    # Render seguro a HTML parcial (evita 500 si falta la plantilla)
+    try:
+        html = render_to_string('firmaElectronica/_detalle_documento.html', ctx, request=request)
+        return HttpResponse(html)
+    except TemplateDoesNotExist:
+        return HttpResponse(
+            '<div style="padding:12px;color:#8a1c1c;background:#fde2e2;'
+            'border:1px solid #f7c9c9;border-radius:8px">'
+            'No se encontró la plantilla <code>firmaElectronica/_detalle_documento.html</code>.'
+            '</div>',
+            status=200
+        )
+    except Exception as e:
+        # Evita 500 y muestra mensaje legible
+        return HttpResponse(
+            f'<div style="padding:12px;color:#8a1c1c;background:#fde2e2;'
+            f'border:1px solid #f7c9c9;border-radius:8px">'
+            f'Error al cargar el detalle: {e}</div>',
+            status=200
+        )

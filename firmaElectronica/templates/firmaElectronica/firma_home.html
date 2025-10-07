@@ -20,6 +20,7 @@
             <a href="{% url 'firma_home' %}">Firma Electrónica</a>
             {% if request.user.is_authenticated and request.user.perfil and request.user.perfil.permiso_firma %}
                 <a class="nav-link" href="{% url 'historial_firmados' %}">Historial</a>
+                <a href="{% url 'reportes' %}">Reportes</a>
             {% endif %}
         </div>
         <div class="logo">Mi Empresa</div>
