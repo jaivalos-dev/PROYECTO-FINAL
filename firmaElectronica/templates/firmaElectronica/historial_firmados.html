@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Historial de documentos firmados - CCG</title>
+  <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    :root{
+      --bg:#f5f6f8;
+      --card:#fff;
+      --text:#222;
+      --muted:#6c757d;
+      --brand:#333;
+      --primary:#5f9cff;
+      --primary-hover:#4b86e8;
+      --success:#28a745;
+      --danger:#dc3545;
+      --secondary:#6c757d;
+      --shadow:0 0 15px rgba(0,0,0,.08);
+      --radius:12px;
+    }
+    *{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    body{min-height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--text)}
+    /* Navbar */
+    .navbar{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:var(--brand);color:#fff}
+    .navbar .left,.navbar .right{display:flex;gap:16px;align-items:center}
+    .navbar a{color:#fff;text-decoration:none;font-weight:600}
+    .navbar a:hover{text-decoration:underline}
+    .logo{font-size:1.4rem;font-weight:800}
+    .username{margin-right:10px;opacity:.9}
+    .logout-btn{background:none;border:none;color:#fff;cursor:pointer;font-weight:600}
+    /* Layout */
+    .wrap{max-width:1100px;margin:32px auto;padding:0 16px;flex:1;width:100%}
+    .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow)}
+    .card-body{padding:24px}
+    h2.title{text-align:center;font-size:2rem;margin-bottom:18px}
+    /* Alerts (para messages) */
+    .alert{padding:12px 14px;border-radius:8px;margin-bottom:14px;font-weight:500}
+    .alert-danger{background:#fde2e2;color:#8a1c1c;border:1px solid #f7c9c9}
+    .alert-success{background:#e2f7ea;color:#166736;border:1px solid #c8efd6}
+    .alert-info{background:#e7f1ff;color:#174ea6;border:1px solid #cfe2ff}
+    /* Filtros */
+    .filters{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;margin-bottom:14px}
+    .filters .field{grid-column:span 12}
+    @media(min-width:720px){
+      .filters .field.col-3{grid-column:span 3}
+      .filters .field.col-6{grid-column:span 6}
+    }
+    label{display:block;font-size:.9rem;margin-bottom:6px;color:var(--muted)}
+    input[type="date"],input[type="text"],select{
+      width:100%;height:40px;border:1px solid #e3e6ea;border-radius:8px;padding:0 10px;background:#fff
+    }
+    .btn{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 14px;border-radius:8px;border:1px solid transparent;cursor:pointer;text-decoration:none;font-weight:600}
+    .btn-primary{background:var(--primary);color:#fff}
+    .btn-primary:hover{background:var(--primary-hover)}
+    .btn-outline{background:#fff;border-color:#d6d9de;color:#2b2f36}
+    .btn-outline:hover{border-color:#b9bec6}
+    .btn-disabled{background:#eef0f3;color:#9aa1aa;border-color:#e1e5ea;cursor:not-allowed}
+    /* Tabla */
+    .table-wrap{overflow:auto}
+    table{width:100%;border-collapse:separate;border-spacing:0}
+    thead th{background:#f3f5f8;color:#3b3f45;text-align:left;font-weight:700;padding:12px;border-top-left-radius:8px;border-top-right-radius:8px}
+    tbody td{padding:12px;border-top:1px solid #eef0f3;vertical-align:middle}
+    tr:hover td{background:#fafbfc}
+    .text-end{text-align:right}
+    .text-nowrap{white-space:nowrap}
+    .truncate{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
+    /* Badges */
+    .badge{display:inline-block;padding:6px 10px;border-radius:999px;font-size:.8rem;font-weight:700}
+    .badge-success{background:rgba(40,167,69,.12);color:#1f7a36}
+    .badge-danger{background:rgba(220,53,69,.12);color:#8f1f2b}
+    .badge-secondary{background:rgba(108,117,125,.12);color:#42484e}
+    /* Footer */
+    .footer{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:#333;color:#fff;margin-top:auto}
+    .footer .socials{display:flex;gap:10px}
+    .footer a{color:#fff;text-decoration:none;font-size:1.1rem}
+    .footer a:hover{opacity:.75}
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="left">
+      <a href="{% url 'agenda_home' %}">Agenda</a>
+      <a href="{% url 'firma_home' %}">Firma Electrónica</a>
+      <a href="{% url 'historial_firmados' %}">Historial</a>
+    </div>
+    <div class="logo">Mi Empresa</div>
+    <div class="right">
+      {% if user.is_authenticated %}
+        <span class="username">{{ user.username }}</span>
+        <form method="POST" action="{% url 'logout' %}" style="display:inline;">
+          {% csrf_token %}
+          <button type="submit" class="logout-btn">Cerrar sesión</button>
+        </form>
+      {% else %}
+        <a href="{% url 'registro' %}">Registrarse</a>
+        <a href="{% url 'login' %}">Iniciar Sesión</a>
+      {% endif %}
+    </div>
+  </nav>
+
+  <!-- Contenido -->
+  <div class="wrap">
+    <div class="card">
+      <div class="card-body">
+
+        <h2 class="title">Historial de documentos firmados</h2>
+
+        <!-- Mensajes Django (por si se redirige cuando falta el archivo) -->
+        {% if messages %}
+          {% for m in messages %}
+            <div class="alert {% if m.tags == 'error' %}alert-danger{% elif m.tags == 'success' %}alert-success{% else %}alert-info{% endif %}">
+              {{ m }}
+            </div>
+          {% endfor %}
+        {% endif %}
+
+        <!-- Filtros -->
+        <form method="get" class="filters">
+          <div class="field col-3">
+            <label>Desde</label>
+            <input type="date" name="fecha_ini" value="{{ fecha_ini }}">
+          </div>
+          <div class="field col-3">
+            <label>Hasta</label>
+            <input type="date" name="fecha_fin" value="{{ fecha_fin }}">
+          </div>
+          <div class="field col-3">
+            <label>Estado</label>
+            <select name="estado">
+              <option value="">(Todos)</option>
+              <option value="ok" {% if estado == 'ok' %}selected{% endif %}>Firmado</option>
+              <option value="pendiente" {% if estado == 'pendiente' %}selected{% endif %}>Pendiente</option>
+              <option value="error" {% if estado == 'error' %}selected{% endif %}>Error</option>
+            </select>
+          </div>
+          <div class="field col-3">
+            <label>Buscar</label>
+            <input type="text" name="q" placeholder="archivo o error..." value="{{ q }}">
+          </div>
+          <div class="field col-3">
+            <button class="btn btn-primary w-100" type="submit">
+              <i class="fa-solid fa-filter" style="margin-right:8px;"></i>Filtrar
+            </button>
+          </div>
+        </form>
+
+        <!-- Tabla -->
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Usuario</th>
+                <th>Archivo</th>
+                <th>Estado</th>
+                <th class="text-end">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for d in page_obj.object_list %}
+              {% with af=d.archivo_firmado|default_if_none:"" %}
+              <tr>
+                <td class="text-nowrap">{{ d.fecha_creacion|date:"Y-m-d H:i" }}</td>
+
+                <td class="text-nowrap">
+                  {% if d.usuario.first_name or d.usuario.last_name %}
+                    {{ d.usuario.get_full_name|default:d.usuario.username }}
+                  {% else %}
+                    {{ d.usuario.username }}
+                  {% endif %}
+                </td>
+
+                <td>
+                  <span class="truncate" title="{{ d.nombre_original|default:af }}">
+                    {% if d.nombre_original %}
+                      {{ d.nombre_original }}
+                    {% elif af %}
+                      {{ af|slice:"-80" }}
+                    {% else %}
+                      —
+                    {% endif %}
+                  </span>
+                </td>
+
+                <td>
+                  {% if d.error_msg %}
+                    <span class="badge badge-danger" title="{{ d.error_msg }}">{{ "Error" }}</span>
+                  {% elif af %}
+                    <span class="badge badge-success">Firmado</span>
+                  {% else %}
+                    <span class="badge badge-secondary">Pendiente</span>
+                  {% endif %}
+                </td>
+
+                <td class="text-end">
+                  {% if af %}
+                    <a href="{% url 'descargar_documento_firmado' d.id %}" class="btn btn-outline">
+                      <i class="fa-solid fa-download" style="margin-right:6px;"></i>Descargar
+                    </a>
+                  {% else %}
+                    <button class="btn btn-disabled" disabled>No disponible</button>
+                  {% endif %}
+                </td>
+              </tr>
+              {% endwith %}
+              {% empty %}
+              <tr>
+                <td colspan="5" style="text-align:center;padding:22px;color:var(--muted);">
+                  No hay registros que coincidan con el filtro.
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Paginación -->
+        {% if page_obj.paginator.num_pages > 1 %}
+        <div style="display:flex;justify-content:center;gap:8px;margin-top:16px;">
+          {% if page_obj.has_previous %}
+            <a class="btn btn-outline" href="?page={{ page_obj.previous_page_number }}&fecha_ini={{ fecha_ini }}&fecha_fin={{ fecha_fin }}&estado={{ estado }}&q={{ q }}">«</a>
+          {% else %}
+            <button class="btn btn-disabled" disabled>«</button>
+          {% endif %}
+
+          <span class="btn btn-disabled" style="cursor:default;">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+
+          {% if page_obj.has_next %}
+            <a class="btn btn-outline" href="?page={{ page_obj.next_page_number }}&fecha_ini={{ fecha_ini }}&fecha_fin={{ fecha_fin }}&estado={{ estado }}&q={{ q }}">»</a>
+          {% else %}
+            <button class="btn btn-disabled" disabled>»</button>
+          {% endif %}
+        </div>
+        {% endif %}
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div>© 2024 Mi Empresa. Todos los derechos reservados.</div>
+    <div class="socials">
+      <a href="https://www.facebook.com/camaradecomerciodeguatemala/?locale=es_LA" target="_blank"><i class="fab fa-facebook-f"></i></a>
+      <a href="https://www.instagram.com/camaradecomerciodeguatemala/?hl=es" target="_blank"><i class="fab fa-instagram"></i></a>
+      <a href="https://wa.me/50224172700" target="_blank"><i class="fab fa-whatsapp"></i></a>
+    </div>
+  </footer>
+</body>
+</html>

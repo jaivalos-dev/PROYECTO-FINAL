@@ -18,6 +18,9 @@
         <div class="left">
             <a href="{% url 'agenda_home' %}">Agenda</a>
             <a href="{% url 'firma_home' %}">Firma Electrónica</a>
+            {% if request.user.is_authenticated and request.user.perfil and request.user.perfil.permiso_firma %}
+                <a class="nav-link" href="{% url 'historial_firmados' %}">Historial</a>
+            {% endif %}
         </div>
         <div class="logo">Mi Empresa</div>
         <div class="right">
@@ -514,6 +517,7 @@
         /* Resumen de estado/error: máx 2 líneas, con “…” */
         .result-left .brief{
         display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
+        line-clamp: 2;
         overflow:hidden; text-overflow:ellipsis; word-break:break-word;
         color:#6c757d; /* small-muted vibe */
         }

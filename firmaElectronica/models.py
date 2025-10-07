@@ -3,6 +3,7 @@ from django.contrib.auth.models import User
 from datetime import datetime
 import uuid
 import secrets
+from django.conf import settings
 
 def path_firmas(instance, filename):
     user_id = instance.usuario_id or 'anon'
@@ -54,3 +55,24 @@ class FirmaElectronica(models.Model):
     class Meta:
         ordering = ['-fecha_creacion']
         indexes = [ models.Index(fields=['estado', 'fecha_creacion']) ]
+
+class DescargaDocumento(models.Model):
+    documento = models.ForeignKey(
+        'FirmaElectronica',
+        on_delete=models.CASCADE,
+        related_name='descargas'
+    )
+    usuario = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    fecha_descarga = models.DateTimeField(auto_now_add=True)
+    ip = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(null=True, blank=True)
+
+    class Meta: 
+        ordering = ['-fecha_descarga']
+        indexes = [
+            models.Index(fields=['usuario', 'fecha_descarga']),
+            models.Index(fields=['fecha_descarga']),
+        ]
+
+    def __str__(self):
+        return f'{self.documento_id} - {self.usuario} - {self.fecha_descarga:%Y-%m-%d %H:%M}'

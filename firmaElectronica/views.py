@@ -1,7 +1,8 @@
 # firmaElectronica/views.py
-from django.shortcuts import render
-from django.http import JsonResponse, HttpResponseBadRequest, HttpResponse
-from .models import FirmaElectronica
+import os
+from django.shortcuts import render, get_object_or_404, redirect
+from django.http import JsonResponse, HttpResponseBadRequest, HttpResponse, FileResponse, Http404
+from .models import FirmaElectronica, DescargaDocumento
 import requests
 from requests.exceptions import Timeout
 from requests.adapters import HTTPAdapter
@@ -18,6 +19,14 @@ from django.views.decorators.http import require_GET
 from urllib3.util.retry import Retry
 import random
 import time
+from django.contrib.auth.decorators import login_required
+from django.utils.encoding import smart_str
+from django.db.models import Q
+import mimetypes
+from usuarios.decorators import permiso_firma_requerido
+from django.core.paginator import Paginator
+from django.core.files.storage import default_storage
+from django.contrib import messages
 
 
 # Sesión global con pooling + retries
@@ -329,3 +338,145 @@ def signbox_url_out(request):
     firma.estado = FirmaElectronica.Estados.FIRMADO
     firma.save(update_fields=['archivo_firmado','estado'])
     return JsonResponse({'ok': True})
+
+
+def _get_client_ip(request):
+    xff = request.META.get('HTTP_X_FORWARDED_FOR')
+    return xff.split(',')[0].strip() if xff else request.META.get('REMOTE_ADDR')
+
+@permiso_firma_requerido
+def historial_firmados(request):
+    """
+    Lista de documentos firmados/intentados, basada en FirmaElectronica.
+    Admin/staff: ve todos; usuario normal: solo los suyos.
+    Filtros: fecha_ini, fecha_fin, estado (ok|error|pendiente), q (buscar por nombre/path).
+    """
+    es_admin = request.user.is_staff or request.user.is_superuser
+
+    qs = FirmaElectronica.objects.select_related('usuario')
+    if not es_admin:
+        qs = qs.filter(usuario=request.user)
+
+    # Filtros
+    fecha_ini = request.GET.get('fecha_ini')  # YYYY-MM-DD
+    fecha_fin = request.GET.get('fecha_fin')  # YYYY-MM-DD
+    estado = request.GET.get('estado')        # ok|error|pendiente
+    q = request.GET.get('q')                  # búsqueda libre (nombre/path)
+
+    if fecha_ini:
+        qs = qs.filter(fecha_creacion__date__gte=fecha_ini)
+    if fecha_fin:
+        qs = qs.filter(fecha_creacion__date__lte=fecha_fin)
+
+    # Derivar estado desde columnas existentes:
+    # - ok: tiene archivo_firmado (no vacío) y sin error
+    # - error: tiene error_msg no vacío
+    # - pendiente: sin archivo_firmado y sin error_msg
+    if estado == 'ok':
+        qs = qs.filter(archivo_firmado__isnull=False).exclude(archivo_firmado='')
+    elif estado == 'error':
+        qs = qs.filter(error_msg__isnull=False).exclude(error_msg='')
+    elif estado == 'pendiente':
+        qs = qs.filter(
+            Q(archivo_firmado__isnull=True) | Q(archivo_firmado=''),
+            Q(error_msg__isnull=True) | Q(error_msg='')
+        )
+
+    if q:
+        qs = qs.filter(
+            Q(nombre_original__icontains=q) |        # <-- agregado
+            Q(archivo_firmado__icontains=q) |
+            Q(error_msg__icontains=q)
+        )
+    qs = qs.order_by('-fecha_creacion')
+    page_obj = Paginator(qs, 20).get_page(request.GET.get('page'))
+
+    return render(request, 'firmaElectronica/historial_firmados.html', {
+        'page_obj': page_obj,
+        'es_admin': es_admin,
+        'fecha_ini': fecha_ini or '',
+        'fecha_fin': fecha_fin or '',
+        'estado': estado or '',
+        'q': q or '',
+    })
+
+def _normalize_media_name(name: str) -> str:
+    """
+    Devuelve un nombre RELATIVO para usar con default_storage.
+    Quita prefijos MEDIA_URL y convierte absolutos bajo MEDIA_ROOT a relativos.
+    """
+    if not name:
+        return ""
+    name = str(name)
+
+    # Si viene con MEDIA_URL al inicio, quitarlo
+    if settings.MEDIA_URL and name.startswith(settings.MEDIA_URL):
+        name = name[len(settings.MEDIA_URL):]
+
+    # Si viene absoluto dentro de MEDIA_ROOT, convertir a relativo
+    try:
+        media_root = os.path.abspath(settings.MEDIA_ROOT)
+        abs_name = os.path.abspath(name)
+        if abs_name.startswith(media_root):
+            name = os.path.relpath(abs_name, media_root)
+    except Exception:
+        pass
+
+    # Normalizar separadores
+    return name.replace("\\", "/")
+
+@permiso_firma_requerido
+def descargar_documento_firmado(request, pk):
+    doc = get_object_or_404(FirmaElectronica, pk=pk)
+
+    es_admin = request.user.is_staff or request.user.is_superuser
+    if not es_admin and doc.usuario_id != request.user.id:
+        raise Http404("No tiene permiso para descargar este documento.")
+
+    f = getattr(doc, 'archivo_firmado', None)
+    if not f:
+        raise Http404("Archivo no disponible.")
+
+    fh = None
+    filename = None
+
+    try:
+        # Caso A: FileField (FieldFile)
+        if hasattr(f, 'open') and hasattr(f, 'name'):
+            storage = getattr(f, 'storage', None) or default_storage
+            name = f.name
+            if not name or not storage.exists(name):
+                raise FileNotFoundError
+            fh = storage.open(name, 'rb')
+            filename = os.path.basename(name)
+        else:
+            # Caso B: cadena ruta relativa/absoluta
+            name = _normalize_media_name(str(f))
+            if not name or not default_storage.exists(name):
+                raise FileNotFoundError
+            fh = default_storage.open(name, 'rb')
+            filename = os.path.basename(name)
+    except FileNotFoundError:
+        messages.error(
+            request,
+            "El archivo firmado no está disponible en el repositorio de medios "
+            "(pudo haberse movido/eliminado o no se generó correctamente)."
+        )
+        return redirect('firma:historial')
+
+    mime_type, _ = mimetypes.guess_type(filename or '')
+    resp = FileResponse(fh, content_type=mime_type or 'application/pdf')
+    resp['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+    # Log de descarga (no bloquea si falla)
+    try:
+        DescargaDocumento.objects.create(
+            documento=doc,
+            usuario=request.user,
+            ip=(request.META.get('HTTP_X_FORWARDED_FOR', '').split(',')[0].strip() or request.META.get('REMOTE_ADDR')),
+            user_agent=request.META.get('HTTP_USER_AGENT', '')[:512],
+        )
+    except Exception:
+        pass
+
+    return resp

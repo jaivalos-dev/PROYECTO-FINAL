@@ -1,11 +1,13 @@
 # firmaElectronica/urls.py
 from django.urls import path
-from .views import firma_home, signbox_urlback, signbox_url_out, sign_status
+from .views import firma_home, signbox_urlback, signbox_url_out, sign_status, historial_firmados, descargar_documento_firmado
 
 urlpatterns = [
     path('', firma_home, name='firma_home'),
     # path('webhooks/signbox/callback/', signbox_urlback, name='signbox_urlback'),
     # path('webhooks/signbox/result/',   signbox_url_out, name='signbox_url_out'),
     path('sign/status/', sign_status, name='sign_status'),
+    path('historial/', historial_firmados, name='historial_firmados'),
+    path('descargar/<int:pk>/', descargar_documento_firmado, name='descargar_documento_firmado'),  # nuevo
 
 ]
