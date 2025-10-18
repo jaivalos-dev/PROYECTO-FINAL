@@ -2,6 +2,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponseForbidden
 from django.utils import timezone
 from django.db.models import Q
+from urllib3 import request
 from .models import Evento, HistorialEvento, ArchivoRespaldo
 from django.urls import reverse_lazy
 from django.contrib import messages
@@ -17,6 +18,7 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.styles import getSampleStyleSheet
 from django.core.mail import send_mail
 import datetime as dt
+from.utils import notificar_evento
 
 
 @permiso_agenda_requerido
@@ -157,22 +159,9 @@ def crear_evento(request):
             )
 
             asunto = f'Evento creado: {evento.titulo}'
-            mensaje = (
-                f"Hola {request.user.first_name or request.user.username},\n\n"
-                f"Tu evento '{evento.titulo}' ha sido creado exitosamente.\n"
-                f"Fecha y hora: {evento.fecha_inicio.strftime('%d/%m/%Y %H:%M')} a {evento.fecha_fin.strftime('%d/%m/%Y %H:%M')}\n"
-                f"Ubicación: {evento.ubicacion or 'No especificada'}\n"
-                f"Estado: {evento.get_estado_display()}\n\n"
-                f"Gracias por usar el sistema de calendarización.\n"
-            )
+            
+            notificar_evento(evento, accion="creado", actor=request.user, incluir_actor=False)
 
-            send_mail(
-                subject=asunto,
-                message=mensaje,
-                from_email=None,  # Usa DEFAULT_FROM_EMAIL
-                recipient_list=[request.user.email],
-                fail_silently=False,
-            )
 
             return redirect('agenda_home')
         else:
@@ -193,118 +182,113 @@ def crear_evento(request):
 @solo_creador_o_admin
 def editar_evento(request, pk):
     evento = get_object_or_404(Evento, pk=pk)
-    
+
     # Verificar que el usuario sea el creador del evento o un administrador
     if not evento.usuario_puede_modificar(request.user):
         messages.error(request, 'No tienes permiso para editar este evento.')
         return HttpResponseForbidden("No tienes permiso para editar este evento.")
-    
+
     if request.method == 'POST':
         form = EventoForm(request.POST, instance=evento)
         archivos = request.FILES.getlist('archivo')
+
+        # Si es hijo, no permitir subir archivos (se usan los del padre)
         if evento.evento_padre:
-            archivos = []   
-        form_archivos = ArchivoRespaldoForm()   
+            archivos = []
+
+        form_archivos = ArchivoRespaldoForm()
+
         if form.is_valid():
+            # Tomar los datos editados pero aún sin persistir
             evento_actualizado = form.save(commit=False)
 
-        # Determinar el evento padre
-        evento_raiz = evento.evento_padre if evento.evento_padre else evento
+            # Mantener flags de repetición del evento original (si los campos no están en el form)
+            evento_actualizado.repetir = evento.repetir
+            evento_actualizado.frecuencia = evento.frecuencia
+            evento_actualizado.fecha_limite_repeticion = evento.fecha_limite_repeticion
 
-        # Calcular duración nueva
-        nueva_duracion = evento_actualizado.fecha_fin - evento_actualizado.fecha_inicio
+            # Determinar evento padre/raíz y duración nueva
+            evento_raiz = evento.evento_padre if evento.evento_padre else evento
+            nueva_duracion = evento_actualizado.fecha_fin - evento_actualizado.fecha_inicio
 
-        # Aplicar cambios a los eventos de la serie
-        for ev in evento_raiz.repeticiones.exclude(id=evento.pk):
-            offset = ev.fecha_inicio - evento.fecha_inicio  # distancia original respecto al evento editado
+            # ---------- Validaciones previas (NO guardar aún) ----------
 
-            ev.fecha_inicio = evento_actualizado.fecha_inicio + offset
-            ev.fecha_fin = ev.fecha_inicio + nueva_duracion
-
-            ev.titulo = evento_actualizado.titulo
-            ev.descripcion = evento_actualizado.descripcion
-            ev.ubicacion = evento_actualizado.ubicacion
-            ev.organizador = evento_actualizado.organizador
-            ev.color = evento_actualizado.color
-            ev.save()
-
-            HistorialEvento.objects.create(
-                evento=ev,
-                usuario=request.user,
-                accion='edición',
-                descripcion='Evento actualizado como parte de una edición masiva de la serie.'
-            )
-            
-            # Verificar si hay eventos traslapados, excluyendo el evento actual
+            # 1) Traslape (comparando contra los valores NUEVOS)
             eventos_traslapados = Evento.objects.filter(
-                Q(fecha_inicio__lt=evento.fecha_fin) & 
-                Q(fecha_fin__gt=evento.fecha_inicio) & 
-                Q(ubicacion=evento.ubicacion)
-            ).exclude(id=evento.id if 'evento' in locals() else None).exclude(estado='cancelado')
-            
-            if eventos_traslapados.exists():
-                messages.error(request, f'Ya existe un evento agendado en ese horario: "{eventos_traslapados.first().titulo}"')
-                # Mostrar archivos del padre si el evento es hijo
-                archivos_a_mostrar = evento.archivos_respaldo.all()
-                mostrar_mensaje_archivos_del_padre = False
+                Q(fecha_inicio__lt=evento_actualizado.fecha_fin) &
+                Q(fecha_fin__gt=evento_actualizado.fecha_inicio) &
+                Q(ubicacion=evento_actualizado.ubicacion)
+            ).exclude(id=evento.id).exclude(estado='cancelado')
 
-                if evento.evento_padre:
-                    archivos_a_mostrar = evento.evento_padre.archivos_respaldo.all()
-                    mostrar_mensaje_archivos_del_padre = True
+            if eventos_traslapados.exists():
+                messages.error(
+                    request,
+                    f'Ya existe un evento agendado en ese horario: "{eventos_traslapados.first().titulo}"'
+                )
+                # Archivos a mostrar (si es hijo, mostrar los del padre)
+                archivos_a_mostrar = evento.evento_padre.archivos_respaldo.all() if evento.evento_padre else evento.archivos_respaldo.all()
                 return render(request, 'agenda/evento_form.html', {
                     'form': form,
                     'evento': evento,
                     'form_archivos': ArchivoRespaldoForm(),
                     'archivos_respaldo': archivos_a_mostrar,
-                    'mostrar_mensaje_archivos_del_padre': mostrar_mensaje_archivos_del_padre
+                    'mostrar_mensaje_archivos_del_padre': bool(evento.evento_padre),
                 })
-            
-            form.cleaned_data['repetir'] = evento.repetir
-            form.cleaned_data['frecuencia'] = evento.frecuencia
-            form.cleaned_data['fecha_limite_repeticion'] = evento.fecha_limite_repeticion   
 
+            # 2) Validación de cantidad de archivos (máx. 2 por evento)
+            if len(archivos) + evento.archivos_respaldo.count() > 2:
+                messages.error(request, "Solo se permiten hasta 2 archivos de respaldo por evento.")
+                archivos_a_mostrar = evento.evento_padre.archivos_respaldo.all() if evento.evento_padre else evento.archivos_respaldo.all()
+                return render(request, 'agenda/evento_form.html', {
+                    'form': form,
+                    'evento': evento,
+                    'form_archivos': ArchivoRespaldoForm(),
+                    'archivos_respaldo': archivos_a_mostrar,
+                    'mostrar_mensaje_archivos_del_padre': bool(evento.evento_padre),
+                })
+
+            # 3) Validación de peso total (máx. 2MB entre todos)
+            peso_total = sum(a.size for a in archivos)
+            if peso_total > 2 * 1024 * 1024:
+                messages.error(request, "El tamaño total de archivos no debe superar los 2MB.")
+                archivos_a_mostrar = evento.evento_padre.archivos_respaldo.all() if evento.evento_padre else evento.archivos_respaldo.all()
+                return render(request, 'agenda/evento_form.html', {
+                    'form': form,
+                    'evento': evento,
+                    'form_archivos': ArchivoRespaldoForm(),
+                    'archivos_respaldo': archivos_a_mostrar,
+                    'mostrar_mensaje_archivos_del_padre': bool(evento.evento_padre),
+                })
+
+            # ---------- Persistencia (SIEMPRE se guarda el principal) ----------
             evento_actualizado.save()
             evento_actualizado.actualizar_estado_automatico()
             evento_actualizado.save()
-            
-            # VALIDAR CANTIDAD
-            if len(archivos) + evento.archivos_respaldo.count() > 2:
-                messages.error(request, "Solo se permiten hasta 2 archivos de respaldo por evento.")
-                # Mostrar archivos del padre si el evento es hijo
-                archivos_a_mostrar = evento.archivos_respaldo.all()
-                mostrar_mensaje_archivos_del_padre = False
 
-                if evento.evento_padre:
-                    archivos_a_mostrar = evento.evento_padre.archivos_respaldo.all()
-                    mostrar_mensaje_archivos_del_padre = True
-                return render(request, 'agenda/evento_form.html', {
-                    'form': form,
-                    'evento': evento,
-                    'form_archivos': ArchivoRespaldoForm(),
-                    'archivos_respaldo': archivos_a_mostrar,
-                    'mostrar_mensaje_archivos_del_padre': mostrar_mensaje_archivos_del_padre
-                })
+            # ---------- Actualización de la serie (repeticiones) ----------
+            # Mover SOLO los hermanos (no el actual)
+            for ev in evento_raiz.repeticiones.exclude(id=evento.pk):
+                # Preservar el desplazamiento relativo
+                offset = ev.fecha_inicio - evento.fecha_inicio
 
-            # VALIDAR PESO TOTAL
-            peso_total = sum(archivo.size for archivo in archivos)
-            if peso_total > 2 * 1024 * 1024:
-                messages.error(request, "El tamaño total de archivos no debe superar los 2MB.")
-                # Mostrar archivos del padre si el evento es hijo
-                archivos_a_mostrar = evento.archivos_respaldo.all()
-                mostrar_mensaje_archivos_del_padre = False
+                ev.fecha_inicio = evento_actualizado.fecha_inicio + offset
+                ev.fecha_fin = ev.fecha_inicio + nueva_duracion
 
-                if evento.evento_padre:
-                    archivos_a_mostrar = evento.evento_padre.archivos_respaldo.all()
-                    mostrar_mensaje_archivos_del_padre = True
-                return render(request, 'agenda/evento_form.html', {
-                    'form': form,
-                    'evento': evento,
-                    'form_archivos': ArchivoRespaldoForm(),
-                    'archivos_respaldo': archivos_a_mostrar,
-                    'mostrar_mensaje_archivos_del_padre': mostrar_mensaje_archivos_del_padre
-                })
+                ev.titulo = evento_actualizado.titulo
+                ev.descripcion = evento_actualizado.descripcion
+                ev.ubicacion = evento_actualizado.ubicacion
+                ev.organizador = evento_actualizado.organizador
+                ev.color = evento_actualizado.color
+                ev.save()
 
-            # GUARDAR ARCHIVOS
+                HistorialEvento.objects.create(
+                    evento=ev,
+                    usuario=request.user,
+                    accion='edición',
+                    descripcion='Evento actualizado como parte de una edición masiva de la serie.'
+                )
+
+            # ---------- Guardar archivos (si no es hijo) ----------
             for archivo in archivos:
                 form_archivo = ArchivoRespaldoForm(files={'archivo': archivo})
                 if form_archivo.is_valid():
@@ -314,23 +298,16 @@ def editar_evento(request, pk):
                     archivo_obj.save()
                 else:
                     messages.error(request, f"Archivo no válido: {archivo.name}")
-                    # Mostrar archivos del padre si el evento es hijo
-                    archivos_a_mostrar = evento.archivos_respaldo.all()
-                    mostrar_mensaje_archivos_del_padre = False
-
-                    if evento.evento_padre:
-                        archivos_a_mostrar = evento.evento_padre.archivos_respaldo.all()
-                        mostrar_mensaje_archivos_del_padre = True
+                    archivos_a_mostrar = evento.evento_padre.archivos_respaldo.all() if evento.evento_padre else evento.archivos_respaldo.all()
                     return render(request, 'agenda/evento_form.html', {
                         'form': form,
                         'evento': evento,
                         'form_archivos': ArchivoRespaldoForm(),
                         'archivos_respaldo': archivos_a_mostrar,
-                        'mostrar_mensaje_archivos_del_padre': mostrar_mensaje_archivos_del_padre
+                        'mostrar_mensaje_archivos_del_padre': bool(evento.evento_padre),
                     })
 
-            messages.success(request, 'Evento actualizado exitosamente.')
-
+            # ---------- Historial y notificación ----------
             HistorialEvento.objects.create(
                 evento=evento_actualizado,
                 usuario=request.user,
@@ -338,51 +315,32 @@ def editar_evento(request, pk):
                 descripcion='Evento editado por el usuario.'
             )
 
-            asunto = f'Evento editado: {evento_actualizado.titulo}'
-            mensaje = (
-                f"Hola {request.user.first_name or request.user.username},\n\n"
-                f"Tu evento '{evento_actualizado.titulo}' ha sido actualizado.\n"
-                f"Nuevo horario: {evento_actualizado.fecha_inicio.strftime('%d/%m/%Y %H:%M')} a {evento_actualizado.fecha_fin.strftime('%d/%m/%Y %H:%M')}\n"
-                f"Ubicación: {evento_actualizado.ubicacion or 'No especificada'}\n"
-                f"Estado: {evento_actualizado.get_estado_display()}\n\n"
-                f"Gracias por mantener tu agenda actualizada.\n"
-            )
+            notificar_evento(evento_actualizado, accion="editado", actor=request.user, incluir_actor=False)
 
-            send_mail(
-                subject=asunto,
-                message=mensaje,
-                from_email=None,
-                recipient_list=[request.user.email],
-                fail_silently=False,
-            )
-
+            messages.success(request, 'Evento actualizado exitosamente.')
             return redirect('agenda_home')
+
         else:
-            # Si el formulario no es válido, asegurarnos de que los errores se muestren
+            # Errores de validación del form
             for field, errors in form.errors.items():
                 for error in errors:
                     messages.error(request, f"Error en {field}: {error}")
-            
-            # Si hay errores no relacionados con campos específicos
             for error in form.non_field_errors():
                 messages.error(request, error)
+
     else:
         form = EventoForm(instance=evento)
-    
-    # Mostrar archivos del padre si el evento es hijo
-    archivos_a_mostrar = evento.archivos_respaldo.all()
-    mostrar_mensaje_archivos_del_padre = False
 
-    if evento.evento_padre:
-        archivos_a_mostrar = evento.evento_padre.archivos_respaldo.all()
-        mostrar_mensaje_archivos_del_padre = True
+    # Archivos a mostrar (si es hijo, mostrar los del padre)
+    archivos_a_mostrar = evento.evento_padre.archivos_respaldo.all() if evento.evento_padre else evento.archivos_respaldo.all()
     return render(request, 'agenda/evento_form.html', {
         'form': form,
         'evento': evento,
         'form_archivos': ArchivoRespaldoForm(),
         'archivos_respaldo': archivos_a_mostrar,
-        'mostrar_mensaje_archivos_del_padre': mostrar_mensaje_archivos_del_padre
+        'mostrar_mensaje_archivos_del_padre': bool(evento.evento_padre),
     })
+
 
 @permiso_agenda_requerido
 @solo_creador_o_admin
@@ -457,21 +415,8 @@ def cancelar_evento(request, pk):
             )
 
             # Enviar correo solo si no es SISTEMA (opcional)
-            if ev.creador.email:
-                send_mail(
-                    subject=f"Evento cancelado: {ev.titulo}",
-                    message=(
-                        f"Hola {ev.creador.first_name or ev.creador.username},\n\n"
-                        f"Tu evento '{ev.titulo}' ha sido cancelado correctamente.\n"
-                        f"Fecha y hora: {ev.fecha_inicio.strftime('%d/%m/%Y %H:%M')} a {ev.fecha_fin.strftime('%d/%m/%Y %H:%M')}\n"
-                        f"Ubicación: {ev.ubicacion or 'No especificada'}\n"
-                        f"Estado actual: {ev.get_estado_display()}\n\n"
-                        f"Gracias por mantener tu agenda actualizada.\n"
-                    ),
-                    from_email=None,
-                    recipient_list=[ev.creador.email],
-                    fail_silently=False,
-                )
+            notificar_evento(ev, accion="cancelado", actor=request.user, incluir_actor=False)
+
 
         messages.success(request, f"Se canceló correctamente el evento{' y su serie completa' if cancelar_serie else ''}.")
         return redirect('agenda_home')

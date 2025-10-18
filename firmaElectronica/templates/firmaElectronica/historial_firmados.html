@@ -7,6 +7,7 @@
   <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
   <style>
     :root{
       --bg:#f5f6f8;
@@ -24,6 +25,7 @@
     }
     *{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
     body{min-height:100vh;display:flex;flex-direction:column;background:var(--bg);color:var(--text)}
+
     /* Navbar */
     .navbar{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:var(--brand);color:#fff}
     .navbar .left,.navbar .right{display:flex;gap:16px;align-items:center}
@@ -32,18 +34,27 @@
     .logo{font-size:1.4rem;font-weight:800}
     .username{margin-right:10px;opacity:.9}
     .logout-btn{background:none;border:none;color:#fff;cursor:pointer;font-weight:600}
+
     /* Layout */
-    .wrap{max-width:1100px;margin:32px auto;padding:0 16px;flex:1;width:100%}
+    .wrap{max-width:1200px;margin:32px auto;padding:0 16px;flex:1;width:100%}
     .card{background:var(--card);border-radius:var(--radius);box-shadow:var(--shadow)}
     .card-body{padding:24px}
     h2.title{text-align:center;font-size:2rem;margin-bottom:18px}
+
     /* Alerts (para messages) */
     .alert{padding:12px 14px;border-radius:8px;margin-bottom:14px;font-weight:500}
     .alert-danger{background:#fde2e2;color:#8a1c1c;border:1px solid #f7c9c9}
     .alert-success{background:#e2f7ea;color:#166736;border:1px solid #c8efd6}
     .alert-info{background:#e7f1ff;color:#174ea6;border:1px solid #cfe2ff}
+
     /* Filtros */
-    .filters{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;margin-bottom:14px}
+    .filters{
+      display:grid;
+      grid-template-columns:repeat(12,1fr);
+      gap:12px;
+      margin-bottom:16px;
+      align-items:end;           /* alinea inputs y botón abajo */
+    }
     .filters .field{grid-column:span 12}
     @media(min-width:720px){
       .filters .field.col-3{grid-column:span 3}
@@ -53,71 +64,79 @@
     input[type="date"],input[type="text"],select{
       width:100%;height:40px;border:1px solid #e3e6ea;border-radius:8px;padding:0 10px;background:#fff
     }
-    .btn{display:inline-flex;align-items:center;justify-content:center;height:40px;padding:0 14px;border-radius:8px;border:1px solid transparent;cursor:pointer;text-decoration:none;font-weight:600}
+    .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 14px;border-radius:8px;border:1px solid transparent;cursor:pointer;text-decoration:none;font-weight:600;white-space:nowrap}
     .btn-primary{background:var(--primary);color:#fff}
     .btn-primary:hover{background:var(--primary-hover)}
     .btn-outline{background:#fff;border-color:#d6d9de;color:#2b2f36}
     .btn-outline:hover{border-color:#b9bec6}
     .btn-disabled{background:#eef0f3;color:#9aa1aa;border-color:#e1e5ea;cursor:not-allowed}
-    /* Tabla */
-    .table-wrap{overflow:auto}
-    table{width:100%;border-collapse:separate;border-spacing:0}
-    thead th{background:#f3f5f8;color:#3b3f45;text-align:left;font-weight:700;padding:12px;border-top-left-radius:8px;border-top-right-radius:8px}
-    tbody td{padding:12px;border-top:1px solid #eef0f3;vertical-align:middle}
-    tr:hover td{background:#fafbfc}
-    .text-end{text-align:right}
-    .text-nowrap{white-space:nowrap}
-    .truncate{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
-    /* Badges */
-    .badge{display:inline-block;padding:6px 10px;border-radius:999px;font-size:.8rem;font-weight:700}
-    .badge-success{background:rgba(40,167,69,.12);color:#1f7a36}
-    .badge-danger{background:rgba(220,53,69,.12);color:#8f1f2b}
-    .badge-secondary{background:rgba(108,117,125,.12);color:#42484e}
-    /* Footer */
-    .footer{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:#333;color:#fff;margin-top:auto}
-    .footer .socials{display:flex;gap:10px}
-    .footer a{color:#fff;text-decoration:none;font-size:1.1rem}
-    .footer a:hover{opacity:.75}
-    /* === KPIs (tarjetas de resumen) === */
-    .kpis{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;margin-bottom:16px}
-    .kpi-card{grid-column:span 12;background:#fff;border:1px solid #e3e6ea;border-radius:12px;padding:16px;
-      text-decoration:none;color:inherit;box-shadow:var(--shadow);display:block}
+
+    /* Botón de filtros */
+    .button-field{display:flex;flex-direction:column}
+    .button-field > label{visibility:hidden;height:20px;margin-bottom:6px} /* ocupa el alto del label */
+    .btn-filter{min-width:140px}
+    @media (max-width:719px){
+      .button-field{grid-column:span 12}
+      .btn-filter{width:100%}
+    }
+
+    /* KPIs */
+    .kpis{  
+      display:flex;
+      gap:12px;
+      justify-content:center;   /* ← centra el grupo */
+      flex-wrap:wrap;           /* 1 por fila en móvil, varias en desktop */
+      margin-bottom:16px;
+    }
+    .kpi-card{
+      background:#fff;border:1px solid #e3e6ea;border-radius:12px;padding:16px;
+      text-decoration:none;color:inherit;box-shadow:var(--shadow);
+      display:flex;flex-direction:column;gap:6px;min-height:86px;
+
+      /* tamaño y centrado interno */
+      flex:0 1 220px;           /* base ~220px; se adapta */
+      align-items:center;       /* centra el contenido horizontalmente */
+      text-align:center;
+    }
     @media(min-width:720px){.kpi-card{grid-column:span 3}}
-    .kpi-card h3{font-size:.9rem;color:var(--muted);margin-bottom:6px}
+    .kpi-card h3{font-size:.9rem;color:var(--muted)}
     .kpi-card .num{font-size:1.8rem;font-weight:800}
     .kpi-total{border-left:4px solid #2b2f36}
     .kpi-success{border-left:4px solid var(--success)}
     .kpi-pending{border-left:4px solid var(--secondary)}
     .kpi-danger{border-left:4px solid var(--danger)}
-    /* Alinear y centrar el botón con el resto de campos */
-    .button-field{
-      display:flex;
-      flex-direction:column;
-      align-self:end;          /* por si el grid hace otra fila */
-      justify-self:center;     /* centrar dentro de su columna */
-      align-items:center;
-    }
 
-    /* El label “fantasma” da la misma altura que los demás labels */
-    .button-field > label{
-      margin-bottom:6px;       /* igual que los otros labels */
-      display:block;
+    /* Tabla */
+    .table-wrap{overflow:auto;width:100%}
+    table{width:100%;border-collapse:separate;border-spacing:0}
+    thead th{
+      background:#f3f5f8;color:#3b3f45;text-align:left;font-weight:700;padding:12px;border-top:1px solid #e9edf3;border-bottom:1px solid #e9edf3
     }
+    thead th:first-child{border-top-left-radius:8px}
+    thead th:last-child{border-top-right-radius:8px}
+    tbody td{padding:12px;border-top:1px solid #eef0f3;vertical-align:middle;background:#fff}
+    tr:hover td{background:#fafbfc}
+    .text-end{text-align:right}
+    .text-nowrap{white-space:nowrap}
+    .truncate{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom}
 
-    .btn-filter{ min-width:140px; height:40px; }
+    /* Badges */
+    .badge{display:inline-block;padding:6px 10px;border-radius:999px;font-size:.8rem;font-weight:700}
+    .badge-success{background:rgba(40,167,69,.12);color:#1f7a36}
+    .badge-danger{background:rgba(220,53,69,.12);color:#8f1f2b}
+    .badge-secondary{background:rgba(108,117,125,.12);color:#42484e}
 
-    /* En pantallas pequeñas, que ocupe todo el ancho */
-    @media (max-width: 719px){
-      .button-field{ align-items:stretch; }
-      .btn-filter{ width:100%; }
-    }
+    /* Fila de detalle */
+    .detalle-row td{background:#fff;border-top:1px solid #e9edf3}
 
-    .detalle-row td{
-      background:#fff;
-      border-top:1px solid #e9edf3;
-    }
+    /* Footer */
+    .footer{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:#333;color:#fff;margin-top:auto}
+    .footer .socials{display:flex;gap:10px}
+    .footer a{color:#fff;text-decoration:none;font-size:1.1rem}
+    .footer a:hover{opacity:.75}
 
   </style>
+
 </head>
 <body>
 
@@ -167,11 +186,11 @@
             <div class="num">{{ kpis.firmados }}</div>
           </a>
 
-          <a class="kpi-card kpi-pending"
+          <!-- <a class="kpi-card kpi-pending"
             href="?estado=pendiente&fecha_ini={{ fecha_ini }}&fecha_fin={{ fecha_fin }}&q={{ q }}">
             <h3>Pendientes</h3>
             <div class="num">{{ kpis.pendientes }}</div>
-          </a>
+          </a> -->
 
           <a class="kpi-card kpi-danger"
             href="?estado=error&fecha_ini={{ fecha_ini }}&fecha_fin={{ fecha_fin }}&q={{ q }}">
@@ -206,7 +225,7 @@
             <select name="estado">
               <option value="">(Todos)</option>
               <option value="ok" {% if estado == 'ok' %}selected{% endif %}>Firmado</option>
-              <option value="pendiente" {% if estado == 'pendiente' %}selected{% endif %}>Pendiente</option>
+              <!-- <option value="pendiente" {% if estado == 'pendiente' %}selected{% endif %}>Pendiente</option> -->
               <option value="error" {% if estado == 'error' %}selected{% endif %}>Error</option>
             </select>
           </div>

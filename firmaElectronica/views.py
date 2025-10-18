@@ -393,22 +393,29 @@ def historial_firmados(request):
     )
 
     kpis = {
-        'total':      scope.count(),
+        'total':      scope.count() - q_pendiente.count(),
         'firmados':   q_firmado.count(),
-        'pendientes': q_pendiente.count(),
+        # 'pendientes': q_pendiente.count(),
         'errores':    q_error.count(),
     }
 
-    # Lista (aplica filtro de estado, si viene)
-    qs = scope
+    pend_cond = (
+        (Q(archivo_firmado__isnull=True) | Q(archivo_firmado='')) &
+        (Q(error_msg__isnull=True)       | Q(error_msg=''))
+    )
+
     if estado == 'ok':
         qs = q_firmado
     elif estado == 'error':
         qs = q_error
     elif estado == 'pendiente':
-        qs = q_pendiente
+        qs = scope.filter(pend_cond)
+    else:
+        qs = scope.exclude(pend_cond)        
+
 
     page_obj = Paginator(qs.order_by('-fecha_creacion'), 20).get_page(request.GET.get('page'))
+
 
     return render(request, 'firmaElectronica/historial_firmados.html', {
         'page_obj': page_obj,
@@ -417,7 +424,7 @@ def historial_firmados(request):
         'fecha_fin': fecha_fin or '',
         'estado': estado or '',
         'q': q or '',
-        'kpis': kpis,  # <- NUEVO
+        'kpis': kpis,
     })
 
 def _normalize_media_name(name: str) -> str:
